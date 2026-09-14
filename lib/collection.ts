@@ -1,0 +1,4 @@
+export const externalIdentity=(grader:string,certNumber:string)=>`${grader.trim().toLowerCase()}:${certNumber.replace(/\s/g,"").toLowerCase()}`;
+export const isDuplicate=(cards:{grader:string;certNumber:string}[],candidate:{grader:string;certNumber:string})=>cards.some(c=>externalIdentity(c.grader,c.certNumber)===externalIdentity(candidate.grader,candidate.certNumber));
+export const matchesSearch=(card:Record<string,unknown>,query:string)=>["subject","set","brand","certNumber","cardNumber","grader"].some(k=>String(card[k]??"").toLowerCase().includes(query.trim().toLowerCase()));
+export const filterCards=<T extends Record<string,unknown>>(cards:T[],query:string,grader?:string,grade?:string)=>cards.filter(c=>(!query||matchesSearch(c,query))&&(!grader||grader==="All graders"||c.grader===grader)&&(!grade||grade==="All grades"||c.grade===grade));
