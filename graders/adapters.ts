@@ -1,5 +1,5 @@
 import type {GraderAdapter} from "./types";
-const unavailable=(id:string,pattern:RegExp,message:string):GraderAdapter<never>=>({id,validate:c=>pattern.test(c),async lookup(cert){if(!this.validate(cert))return{ok:false,code:"invalid_cert",message:"The certification number format is invalid."};return{ok:false,code:"unavailable",message}}});
+const unavailable=(id:string,pattern:RegExp,message:string):GraderAdapter<never>=>({id,validate:c=>pattern.test(c),async lookup(cert){if(!this.validate(cert))return{ok:false,code:"INVALID_CERT",message:"The certification number format is invalid."};return{ok:false,code:"GRADER_UNAVAILABLE",message}}});
 export const degree=unavailable("Degree",/^\d{8}$/,"Degree exposes a public lookup form, but its response needs a server-side parser before results can be trusted.");
 export const psa=unavailable("PSA",/^\d{8,10}$/,"PSA lookup requires a server-held API token. Configure PSA_API_TOKEN to enable it.");
 export const cgc=unavailable("CGC",/^\d{10}$/,"CGC verification parsing is not enabled yet.");

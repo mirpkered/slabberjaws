@@ -1,13 +1,13 @@
 # Grader integration report — 2026-09-14
 
-## Degree — automatic lookup enabled
+## Degree — server lookup adapter implemented
 
 - The form POSTs `action=degree_check_cert` and the numeric certificate (leading zeroes removed) to WordPress `admin-ajax.php`. JSON returns `exists` and an eight-digit `slug`, then the browser opens `/certification/{slug}/`.
 - Cert pages are server-rendered HTML. Common data is in schema.org `Product` JSON-LD; variant, population, rarity, and set details are semantic HTML fields.
 - `00409451`: 1993 Topps Joe Oliver #14, Series One - Black Gold, DEGREE 9. `00409452`: 1994 Topps Billy Wagner #209, Series One - 1993 Draft Pick, GOLD, DEGREE 8.
 - Available: cert, grade, year, brand, set, subject, number, variant, exact-card population, set population, rarity, Surface, Corners/Edges, Centering, and Creases/Dents. Neither fixture displayed grader notes.
 - One cert-specific immutable PNG is exposed as the Product/Open Graph image. It is a generated certification graphic, not separate front/back slab photography. Both fixture URLs returned 200 with an immutable 120-day cache policy. No back image was exposed.
-- Server proxy required: public responses do not grant cross-origin browser access.
+- Server proxy required: public responses do not grant cross-origin browser access. The AJAX response also establishes a `PHPSESSID`; the certification page returns 403 unless the server forwards that cookie.
 - Brittleness: JSON-LD is the stable anchor. Population, variant, and rarity use named HTML classes and fail safely if the page changes.
 
 ## CGC — automatic lookup not enabled
@@ -32,7 +32,9 @@
 - No cert-specific fields or images could be verified and no cross-origin API is exposed.
 - Decision: retain unsupported/manual fallback until a verification path is published.
 
-## PSA — credential-ready scaffold
+## PSA — credential-ready Edge Function adapter
 
 - PSA was not queried beyond its existing public architecture.
-- A future server adapter can read `PSA_API_TOKEN`. `.env.example` documents an empty server-only variable; never use a `NEXT_PUBLIC_` prefix or commit a value.
+- The Edge Function adapter calls PSA's documented `GetByCertNumber` REST method and normalizes its documented `PublicPSACert` fields.
+- It reads `PSA_API_TOKEN` only from the function environment. `.env.example` documents an empty server-only variable; never use a `VITE_` prefix or commit a value.
+- The fixture `94877724` has not been queried because no PSA API token is configured.

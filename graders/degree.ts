@@ -1,5 +1,5 @@
-import type { NormalizedCard } from "./model";
-import type { LookupResult } from "./types";
+import type { NormalizedCard } from "./model.ts";
+import type { LookupResult } from "./types.ts";
 
 type ProductSchema={"@type"?:string;image?:string;brand?:{name?:string};about?:{name?:string};additionalProperty?:Array<{name?:string;value?:string}>};
 const text=(html:string,className:string)=>{const hit=html.match(new RegExp(`<([a-z0-9]+)[^>]+class=["'][^"']*${className}[^"']*["'][^>]*>([\\s\\S]*?)<\\/\\1>`,"i"));return hit?decode(hit[2].replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()):""};
@@ -19,16 +19,20 @@ export function parseDegreeHtml(html:string,certNumber:string):NormalizedCard{
 }
 
 export async function lookupDegree(cert:string):Promise<LookupResult<NormalizedCard>>{
-  if(!/^\d{8}$/.test(cert))return{ok:false,code:"invalid_cert",message:"Degree certification numbers contain eight digits."};
+  if(!/^\d{8}$/.test(cert))return{ok:false,code:"INVALID_CERT",message:"Degree certification numbers contain eight digits."};
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);
-  const publicHeaders={"user-agent":"Mozilla/5.0 (compatible; Slabberjaws/1.0; +personal collection lookup)","accept":"text/html,application/json;q=0.9,*/*;q=0.8"};
+  const publicHeaders={"user-agent":"Mozilla/5.0 (compatible; Slabberjaws/1.0; +personal collection lookup)","accept":"text/html,application/json;q=0.9,*/*;q=0.8","referer":"https://degreegrading.com/certification-lookup/"};
   try{const check=await fetch("https://degreegrading.com/wp-admin/admin-ajax.php",{method:"POST",headers:{...publicHeaders,"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({action:"degree_check_cert",cert:cert.replace(/^0+/,"")}),signal:controller.signal});
-    if(!check.ok)return{ok:false,code:"unavailable",message:"Degree’s lookup service is unavailable."};
+    if(!check.ok)return{ok:false,code:"GRADER_UNAVAILABLE",message:"Degree’s lookup service is unavailable."};
     const result=await check.json() as {success?:boolean;data?:{exists?:boolean;slug?:string}};
-    if(!result.success||!result.data?.exists)return{ok:false,code:"not_found",message:"Degree could not find this certification."};
-    const page=await fetch(`https://degreegrading.com/certification/${result.data.slug}/`,{headers:publicHeaders,signal:controller.signal});if(!page.ok)return{ok:false,code:"unavailable",message:"Degree’s certification page is unavailable."};
-    try{return{ok:true,card:parseDegreeHtml(await page.text(),cert)}}catch{return{ok:false,code:"parser_changed",message:"Degree’s certification page format has changed."}}
+    if(!result.success||!result.data?.exists)return{ok:false,code:"CERT_NOT_FOUND",message:"Degree could not find this certification."};
+    const sessionCookie=check.headers.get("set-cookie")?.split(";",1)[0];
+    if(!sessionCookie)return{ok:false,code:"LOOKUP_BLOCKED",message:"Degree did not establish the lookup session required to open this certification."};
+    const page=await fetch(`https://degreegrading.com/certification/${result.data.slug}/`,{headers:{...publicHeaders,cookie:sessionCookie},signal:controller.signal});
+    if(page.status===403)return{ok:false,code:"LOOKUP_BLOCKED",message:"Degree blocked the certification page request."};
+    if(!page.ok)return{ok:false,code:"GRADER_UNAVAILABLE",message:"Degree’s certification page is unavailable."};
+    try{return{ok:true,card:{...parseDegreeHtml(await page.text(),cert),id:crypto.randomUUID()}}}catch{return{ok:false,code:"PARSE_FAILED",message:"Degree’s certification page format has changed."}}
   } catch(error) {
-    return {ok:false,code:error instanceof Error&&error.name==="AbortError"?"timeout":"unavailable",message:error instanceof Error&&error.name==="AbortError"?"Degree lookup timed out.":"Degree lookup could not be reached."};
+    return {ok:false,code:error instanceof Error&&error.name==="AbortError"?"TIMEOUT":"GRADER_UNAVAILABLE",message:error instanceof Error&&error.name==="AbortError"?"Degree lookup timed out.":"Degree lookup could not be reached."};
   } finally { clearTimeout(timer); }
 }

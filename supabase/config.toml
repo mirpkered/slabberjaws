@@ -1,0 +1,2 @@
+[functions.lookup]
+verify_jwt = false
