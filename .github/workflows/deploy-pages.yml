@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:responsive
       - run: npm run build
       - run: npm run pages:prepare
       - uses: actions/configure-pages@v5
