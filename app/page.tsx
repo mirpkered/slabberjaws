@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Archive, ArrowLeft, ChevronDown, ExternalLink, ImageOff, LogIn, LogOut, Plus, Search, ShieldCheck, SlidersHorizontal, UserRound, X } from "lucide-react";
 import type { NormalizedCard } from "../graders/model";
-import { LocalStorageCollectionRepository } from "../collection/local-storage-repository";
-import { selectRepository } from "../collection/factory";
+import { createBrowserRepositories } from "../collection/runtime";
 import { importLocalCards, type ImportResult } from "../collection/import-local";
 import type { CollectionRepository } from "../collection/repository";
 import { DuplicateCardError } from "../collection/repository";
@@ -32,10 +31,10 @@ export default function Home(){
   const filtered=useMemo(()=>cards.filter(c=>{const hay=[c.subject,c.set,c.brand,c.certNumber,c.cardNumber,c.grader].join(" ").toLowerCase();return hay.includes(query.toLowerCase())&&(grader==="All graders"||c.grader===grader)&&(grade==="All grades"||c.grade===grade)}).sort((a,b)=>sort==="Oldest"?a.addedAt.localeCompare(b.addedAt):sort==="Grade high"?Number(b.grade)-Number(a.grade):b.addedAt.localeCompare(a.addedAt)),[cards,query,grader,grade,sort]);
 
   useEffect(()=>{
-    const local = new LocalStorageCollectionRepository(window.localStorage, seed);
+    const { local } = createBrowserRepositories({ fallback: seed });
     let current = true;
     const switchRepository = async (nextSession:Session|null) => {
-      const next = selectRepository({storage:window.localStorage,fallback:seed,client:supabase,userId:nextSession?.user.id});
+      const { active: next } = createBrowserRepositories({fallback:seed,client:supabase,userId:nextSession?.user.id});
       setSession(nextSession); setRepository(next); setLoading(true); setNotice(""); setImportResult(null);
       if (nextSession) setCards([]);
       try {
