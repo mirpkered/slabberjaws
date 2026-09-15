@@ -18,6 +18,12 @@ In **Authentication → URL Configuration** set:
 - Redirect URL: `https://mirpkered.github.io/slabberjaws/`
 - Local redirect URL: `http://localhost:5173/`
 
+The same URLs are used for email confirmation and password-recovery links. In
+Supabase, make sure both exact URLs are listed in **Additional Redirect URLs**;
+the recovery email exchanges its one-time token in the browser and opens the
+in-app **Set a new password** screen. Keep the Site URL set to the production
+Pages URL above.
+
 If local development uses another port, add that exact origin with a trailing slash as another allowed redirect URL.
 
 ## 3. Configure local development

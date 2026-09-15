@@ -30,6 +30,7 @@ for(const [width,height] of [[320,568],[375,667],[390,844],[430,932],[768,1024],
     await page.route('**/functions/v1/lookup',route=>{requests.push(route.request().postData()??'');return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'Lookup unavailable.'}});});
     await page.goto('./',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
     await expect(page.getByRole('button',{name:'Turn flashlight on'})).toBeVisible();await fits(page);
+    expect(await page.evaluate(()=>{const camera=document.querySelector('.scan-camera')!.getBoundingClientRect(),target=document.querySelector('.scan-target')!.getBoundingClientRect(),video=document.querySelector('.scan-camera video')!;return {ratio:camera.width/camera.height,objectFit:getComputedStyle(video).objectFit,targetInside:target.left>=camera.left&&target.right<=camera.right&&target.top>=camera.top&&target.bottom<=camera.bottom};})).toEqual({ratio:expect.closeTo(4/3,0.03),objectFit:'cover',targetInside:true});
     await page.getByRole('button',{name:'Turn flashlight on'}).click();
     await state(page,'https://example.com/cert/00409451');
     await expect(page.getByRole('heading',{name:'Which grading company is this?'})).toBeVisible();await fits(page);

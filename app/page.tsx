@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive,
@@ -129,9 +129,12 @@ export default function Home() {
     [looking, setLooking] = useState(false),
     [notice, setNotice] = useState(""),
     [authOpen, setAuthOpen] = useState(false),
-    [authMode, setAuthMode] = useState<"signin" | "signup">("signin"),
+    [authMode, setAuthMode] = useState<
+      "signin" | "signup" | "forgot" | "reset"
+    >("signin"),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
+    [passwordConfirm, setPasswordConfirm] = useState(""),
     [authBusy, setAuthBusy] = useState(false),
     [authMessage, setAuthMessage] = useState(""),
     [localImport, setLocalImport] = useState<{
@@ -214,7 +217,12 @@ export default function Home() {
     }
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setAuthMode("reset");
+        setAuthOpen(true);
+        setAuthMessage("");
+      }
       void switchRepository(nextSession);
     });
     return () => {
@@ -362,7 +370,15 @@ export default function Home() {
       );
     }
   }
-  async function submitAuth() {
+  const authRedirectUrl = () => window.location.href.split(/[?#]/)[0];
+  function switchAuthMode(mode: "signin" | "signup" | "forgot") {
+    setAuthMode(mode);
+    setAuthMessage("");
+    setPassword("");
+    setPasswordConfirm("");
+  }
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     if (!supabase) {
       setAuthMessage(
         "Cloud accounts are not configured yet. Your cards remain on this device.",
@@ -379,11 +395,13 @@ export default function Home() {
         });
         if (error) throw error;
         setAuthOpen(false);
-      } else {
+      } else if (authMode === "signup") {
+        if (password !== passwordConfirm)
+          throw new Error("Passwords do not match.");
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.href.split(/[?#]/)[0] },
+          options: { emailRedirectTo: authRedirectUrl() },
         });
         if (error) throw error;
         if (data.session) setAuthOpen(false);
@@ -391,6 +409,25 @@ export default function Home() {
           setAuthMessage(
             "Check your email to confirm your account, then sign in.",
           );
+      } else if (authMode === "forgot") {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: authRedirectUrl(),
+        });
+        if (error) throw error;
+        setAuthMessage(
+          "If an account uses that email, a password-reset link is on its way.",
+        );
+      } else {
+        if (password.length < 6)
+          throw new Error("Use a password with at least 6 characters.");
+        if (password !== passwordConfirm)
+          throw new Error("Passwords do not match.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        setPassword("");
+        setPasswordConfirm("");
+        setAuthMessage("Password updated. You can continue to your collection.");
+        window.history.replaceState({}, document.title, authRedirectUrl());
       }
     } catch (error) {
       setAuthMessage(
@@ -628,68 +665,38 @@ export default function Home() {
               <X />
             </button>
             <p className="eyebrow">SLABBERJAWS ACCOUNT</p>
-            <h2>{authMode === "signin" ? "Sign in" : "Create account"}</h2>
+            <h2>
+              {authMode === "signin" ? "Sign in" : authMode === "signup" ? "Create account" : authMode === "forgot" ? "Reset password" : "Set a new password"}
+            </h2>
             <p className="muted">
-              {authMode === "signin"
-                ? "Open your cloud collection on this device."
-                : "Save your collection across browsers and devices."}
+              {authMode === "signin" ? "Open your cloud collection on this device." : authMode === "signup" ? "Save your collection across browsers and devices." : authMode === "forgot" ? "Enter your email and we’ll send a secure reset link." : "Choose a new password for your Slabberjaws account."}
             </p>
-            <div className="auth-tabs">
-              <button
-                className={authMode === "signin" ? "active" : ""}
-                onClick={() => {
-                  setAuthMode("signin");
-                  setAuthMessage("");
-                }}
-              >
-                Sign In
+            {(authMode === "signin" || authMode === "signup") && <div className="auth-tabs">
+              <button type="button" className={authMode === "signin" ? "active" : ""} onClick={() => switchAuthMode("signin")}>Sign In</button>
+              <button type="button" className={authMode === "signup" ? "active" : ""} onClick={() => switchAuthMode("signup")}>Create Account</button>
+            </div>}
+            <form className="auth-form" onSubmit={submitAuth}>
+              {authMode !== "reset" && <label className="field" htmlFor="account-email">
+                Email
+                <input id="account-email" name="email" type="email" required autoComplete="username" autoCapitalize="none" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>}
+              {authMode !== "forgot" && <label className="field" htmlFor="account-password">
+                {authMode === "reset" ? "New password" : "Password"}
+                <input id="account-password" name={authMode === "signin" ? "password" : "new-password"} type="password" required minLength={6} autoComplete={authMode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>}
+              {(authMode === "signup" || authMode === "reset") && <label className="field" htmlFor="account-password-confirm">
+                Confirm new password
+                <input id="account-password-confirm" name="confirm-password" type="password" required minLength={6} autoComplete="new-password" value={passwordConfirm} onChange={(e) => setPasswordConfirm(e.target.value)} />
+              </label>}
+              {authMode === "signin" && <button type="button" className="text-button auth-forgot" onClick={() => switchAuthMode("forgot")}>Forgot password?</button>}
+              {authMessage && <p role="status" className="form-message">{authMessage}</p>}
+              <button type="submit" className="primary wide" disabled={authBusy || !password && authMode !== "forgot" || !email && authMode !== "reset"}>
+                {authBusy ? "Please wait…" : authMode === "signin" ? "Sign In" : authMode === "signup" ? "Create Account" : authMode === "forgot" ? "Send reset email" : "Update password"}
               </button>
-              <button
-                className={authMode === "signup" ? "active" : ""}
-                onClick={() => {
-                  setAuthMode("signup");
-                  setAuthMessage("");
-                }}
-              >
-                Create Account
-              </button>
-            </div>
-            <label className="field">
-              Email
-              <input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              Password
-              <input
-                type="password"
-                minLength={6}
-                autoComplete={
-                  authMode === "signin" ? "current-password" : "new-password"
-                }
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {authMessage && <p className="form-message">{authMessage}</p>}
-            <button
-              className="primary wide"
-              disabled={authBusy || !email || !password}
-              onClick={submitAuth}
-            >
-              {authBusy
-                ? "Please wait…"
-                : authMode === "signin"
-                  ? "Sign In"
-                  : "Create Account"}
-            </button>
-            <button className="text-button" onClick={() => setAuthOpen(false)}>
-              Continue on This Device
-            </button>
+            </form>
+            {authMode === "forgot" && <button type="button" className="text-button" onClick={() => switchAuthMode("signin")}>Back to Sign In</button>}
+            {authMode === "reset" && <button type="button" className="text-button" onClick={() => switchAuthMode("forgot")}>Request another reset email</button>}
+            {authMode !== "reset" && <button type="button" className="text-button" onClick={() => setAuthOpen(false)}>Continue on This Device</button>}
             {!isSupabaseConfigured && (
               <p className="configuration-note">
                 Cloud accounts are unavailable until Supabase is configured.

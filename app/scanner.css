@@ -9,7 +9,13 @@
 }
 .scan-camera {
   position: relative;
-  height: clamp(150px, 32dvh, 320px);
+  width: 100%;
+  min-width: 0;
+  /* A fixed viewing shape gives portrait-phone cameras a broad usable area.
+     The video is deliberately cropped, never letterboxed, so the frame only
+     sits on real camera pixels. */
+  aspect-ratio: 4 / 3;
+  max-height: min(46dvh, 390px);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -19,11 +25,13 @@
 .scan-camera video {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  display: block;
+  object-fit: cover;
+  object-position: center;
 }
 .scan-target {
   position: absolute;
-  inset: 18% 8%;
+  inset: 27% 7%;
   border: 2px solid var(--accent);
   border-radius: 8px;
   pointer-events: none;
@@ -52,6 +60,10 @@
 }
 @media (max-width: 640px) {
   .scan-camera {
-    height: clamp(140px, 28dvh, 260px);
+    aspect-ratio: 4 / 3;
+    max-height: min(42dvh, 330px);
+    margin-top: 12px;
   }
+  .scan-entry h3 { margin-top: 12px; }
+  .scan-entry .scan-privacy { margin-block: 8px; }
 }
