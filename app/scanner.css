@@ -41,6 +41,10 @@
 .scan-diagnostics { font: 0.7rem/1.4 ui-monospace, monospace; color: var(--text-muted); overflow-wrap: anywhere; }
 .scan-target-label { display: none; }
 .scan-desktop-actions { display: grid; gap: 8px; }
+.raw-payload { display:grid; gap:10px; margin:16px 0; padding:14px; border:1px solid var(--border); background:var(--surface-raised); overflow-wrap:anywhere; }
+.raw-payload strong { font-size:.72rem; letter-spacing:.12em; }
+.raw-payload code { white-space:pre-wrap; user-select:text; color:var(--text); line-height:1.45; }
+.raw-payload p { margin:0; color:var(--text-muted); font-size:.85rem; }
 .focus-reticle { position:absolute; width:48px; height:48px; margin:-24px; border:2px solid var(--accent-highlight); border-radius:50%; pointer-events:none; animation:focus-pulse .9s ease-out; }
 .scan-zoom { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; align-items:center; color:var(--text-muted); font-size:.8rem; }
 .scan-zoom input { accent-color:var(--accent); width:100%; min-height:36px; }

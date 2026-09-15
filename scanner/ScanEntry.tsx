@@ -15,7 +15,7 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
   const pointers = useRef(new Map<number,{x:number;y:number}>());
   const [attempt,setAttempt] = useState(0), [payload,setPayload] = useState<ScanPayload | null>(null);
   const [cert,setCert] = useState(''), [grader,setGrader] = useState<Grader | ''>('');
-  const [error,setError] = useState(''), [status,setStatus] = useState('Requesting camera access…');
+  const [error,setError] = useState(''), [status,setStatus] = useState('Requesting camera access…'), [copyStatus,setCopyStatus] = useState('');
   const [hasTorch,setHasTorch] = useState(false), [torch,setTorch] = useState(false), [diagnostics,setDiagnostics] = useState<CameraDiagnostics | null>(null), [focusPoint,setFocusPoint] = useState<{x:number;y:number}|null>(null);
   useEffect(() => {
     if (payload || !video.current) return;
@@ -30,7 +30,8 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
     window.addEventListener('pagehide',interrupt);
     return () => {current.stop(); camera.current = null;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',interrupt);};
   },[attempt,payload]);
-  function reset() {camera.current?.stop();setPayload(null);setCert('');setGrader('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  function reset() {camera.current?.stop();setPayload(null);setCert('');setGrader('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setCopyStatus('');setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  async function copyRaw() { if(!payload) return; try { await navigator.clipboard.writeText(payload.rawPayload); setCopyStatus('Copied'); } catch { setCopyStatus('Select and copy the decoded data below.'); } }
   async function scanStill() { setStatus('Scanning this frame…'); const surface=cameraSurface.current?.getBoundingClientRect(), target=cameraSurface.current?.querySelector('.scan-target')?.getBoundingClientRect(), v=video.current; const region=surface&&target&&v?.videoWidth ? sourceRect({width:v.videoWidth,height:v.videoHeight},{x:surface.x,y:surface.y,width:surface.width,height:surface.height},{x:target.x,y:target.y,width:target.width,height:target.height}) : undefined; const result=await camera.current?.scanStill(region); if(!result?.raw) setStatus(`Couldn't read that code. Hold it steady and try again, or enter the cert manually.`); }
   async function setZoom(value:number) { const current=await camera.current?.zoom(value); if(current !== undefined) setDiagnostics(previous=>previous?.zoom ? {...previous,zoom:{...previous.zoom,current}} : previous); }
   function distance() { const values=[...pointers.current.values()]; return values.length===2 ? Math.hypot(values[0].x-values[1].x,values[0].y-values[1].y) : 0; }
@@ -45,7 +46,7 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
     {payload ? <>
       <h3>Which grading company is this?</h3>
       <p className="muted">Check the slab label and confirm the certification number.</p>
-      {!payload.certNumber && <p role="status" className="form-message">The code was read, but a certification number could not be identified safely. Type it below or rescan.</p>}
+      {!payload.certNumber && <><p role="status" className="form-message">The code was read, but a certification number could not be identified safely. Type it below or rescan.</p><section className="raw-payload" aria-label="Decoded raw data"><strong>DECODED RAW DATA</strong><code>{payload.rawPayload}</code><button type="button" className="account-button" onClick={()=>void copyRaw()}>Copy raw data</button>{copyStatus&&<p role="status">{copyStatus}</p>}</section></>}
       <label className="field">Grading company<select value={grader} onChange={event=>setGrader(event.target.value as Grader)}><option value="">Choose a grading company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label>
       <label className="field">Decoded certification number<input value={cert} onChange={event=>setCert(event.target.value)} autoComplete="off" spellCheck={false}/></label>
       <button className="primary wide" disabled={!grader || !cert.trim()} onClick={()=>{if(grader)onConfirm(grader,cert.trim());}}>Look up certification</button>
