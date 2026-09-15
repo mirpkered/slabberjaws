@@ -1,0 +1,57 @@
+.scan-entry {
+  min-width: 0;
+}
+.scan-entry h3 {
+  font-family: Georgia, serif;
+  font-size: 1.4rem;
+  line-height: 1.3;
+  margin-top: 18px;
+}
+.scan-camera {
+  position: relative;
+  height: clamp(150px, 32dvh, 320px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 18px;
+}
+.scan-camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.scan-target {
+  position: absolute;
+  inset: 18% 8%;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  pointer-events: none;
+}
+.scan-privacy {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.scan-entry .account-button {
+  color: var(--text);
+  width: 100%;
+  justify-content: center;
+}
+.scan-entry .text-button {
+  width: 100%;
+  padding: 10px 8px;
+}
+.scan-entry .primary:disabled {
+  cursor: not-allowed;
+}
+.scan-launch {
+  width: 100%;
+  justify-content: center;
+  margin-top: 18px;
+}
+@media (max-width: 640px) {
+  .scan-camera {
+    height: clamp(140px, 28dvh, 260px);
+  }
+}

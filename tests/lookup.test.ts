@@ -31,7 +31,7 @@ test("manual fallback preserves grader and certification number",()=>{
   const card=createManualCard("Degree"," 00409452 ");assert.equal(card.grader,"Degree");assert.equal(card.certNumber,"00409452");assert.equal(card.manual,true);
 });
 
-test("charcoal theme exposes accessible shared tokens",async()=>{
+test("charcoal theme exposes accessible shark-blue shared tokens",async()=>{
   const css=await readFile(new URL("../app/globals.css",import.meta.url),"utf8");
-  for(const token of ["--bg:#17191c","--surface:#22252a","--surface-raised:#2a2e34","--border:#3a3f46","--text:#f2f0e9","--text-muted:#a8adb4","focus-visible"])assert.ok(css.includes(token),token);
+  for(const token of ["--bg: #17191c","--surface: #22252a","--surface-raised: #2a2e34","--border: #3a3f46","--text: #f2f0e9","--text-muted: #a8adb4","--accent: #28a8e8","--accent-highlight: #39c5ff","--accent-deep: #1677b8","focus-visible"])assert.ok(css.includes(token),token);
 });
