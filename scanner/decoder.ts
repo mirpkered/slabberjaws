@@ -16,7 +16,12 @@ export async function createDecoder(): Promise<Decoder> {
       }
     } catch { /* Safari/native partial implementations fall back to ZXing. */ }
   }
-  const [{BrowserMultiFormatReader}, {BarcodeFormat, DecodeHintType, NotFoundException, ChecksumException, FormatException}] = await Promise.all([import('@zxing/browser'), import('@zxing/library')]);
+  const [browser, libraryModule] = await Promise.all([import('@zxing/browser'), import('@zxing/library')]);
+  // The package is published with both CommonJS and ESM entry points. Avoid a
+  // named dynamic import here: Node's Linux loader can otherwise reject it.
+  const library = (libraryModule as unknown as { default?: typeof libraryModule }).default ?? libraryModule;
+  const { BrowserMultiFormatReader } = browser;
+  const { BarcodeFormat, DecodeHintType, NotFoundException, ChecksumException, FormatException } = library;
   const reader = new BrowserMultiFormatReader(new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.QR_CODE, BarcodeFormat.ITF, BarcodeFormat.DATA_MATRIX, BarcodeFormat.PDF_417, BarcodeFormat.AZTEC]]]));
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d', {willReadFrequently: true});

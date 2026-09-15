@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { QRCodeWriter, BarcodeFormat } from '@zxing/library';
+import * as ZXingModule from '@zxing/library';
+
+const ZXing = (ZXingModule as unknown as {default?:typeof ZXingModule}).default ?? ZXingModule;
+const {QRCodeWriter, BarcodeFormat} = ZXing;
 
 test('ZXing fallback decodes QR pixels and tolerates a blank frame',async({page})=>{
   test.skip(Boolean(process.env.RESPONSIVE_BASE_URL),'Source-module decoder test runs against the local test server.');
