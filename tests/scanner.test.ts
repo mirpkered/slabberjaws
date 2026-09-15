@@ -64,3 +64,9 @@ test('camera exposes only real zoom controls and clamps track zoom constraints',
   assert.deepEqual(details,{decoder:'zxing',formats:[],width:640,height:undefined,label:'',torch:true,zoom:{min:1,max:3,step:.5,current:1},focusModes:['continuous'],focusMode:'continuous',pointsOfInterest:false});
   await camera.zoom(10);assert.deepEqual(applied.at(-1),{advanced:[{zoom:3}]});camera.stop();
 });
+test('still-frame decode advances with text and never persists a frame',async()=>{
+  const f=fixture();const decoder={decode:async()=>undefined,decodeStill:async()=> 'https://degreegrading.com/certification/00409451/',dispose(){},kind:'zxing' as const,formats:['qr_code']};
+  const camera=startCamera(f.options,{...f.dependencies,decoder:async()=>decoder});await camera.ready;
+  const result=await camera.scanStill();
+  assert.equal(result.raw,'https://degreegrading.com/certification/00409451/');assert.deepEqual(f.payloads,['https://degreegrading.com/certification/00409451/']);assert.equal(f.counts().stops,1);
+});
