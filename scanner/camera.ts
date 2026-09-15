@@ -90,9 +90,9 @@ export function startCamera(options: Options, dependencies: CameraDependencies =
     const track = videoTrack();
     if (!track || !diagnostics?.pointsOfInterest || stopped) return false;
     try { await track.applyConstraints({advanced:[{pointsOfInterest:[{x,y}]} as unknown as MediaTrackConstraintSet]}); return true; } catch { return false; }
-  }, async scanStill() {
+  }, async scanStill(region?: {x:number;y:number;width:number;height:number}) {
     if (stopped || !decoder || options.video.readyState < 2 || !options.video.videoWidth) return {raw:undefined, failure:'Video frame unavailable'};
-    try { const raw = await (decoder.decodeStill?.(options.video) ?? decoder.decode(options.video)); if(raw?.trim()) { stop(); options.onRead(raw); return {raw}; } return {raw:undefined,failure:decoder.lastFailure ?? 'No code found'}; }
+    try { const raw = await (decoder.decodeStill?.(options.video,region) ?? decoder.decode(options.video)); if(raw?.trim()) { stop(); options.onRead(raw); return {raw}; } return {raw:undefined,failure:decoder.lastFailure ?? 'No code found'}; }
     catch (error) { return {raw:undefined,failure:error instanceof Error ? error.name : 'Still-frame decode failed'}; }
   }};
 }

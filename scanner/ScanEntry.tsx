@@ -3,12 +3,14 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { NormalizedCard } from '../graders/model';
 import { startCamera, type CameraDiagnostics } from './camera';
 import { parseScanPayload, type ScanPayload } from './payload';
+import { sourceRect } from './frame';
 
 type Grader = NormalizedCard['grader'];
 type Props = { graders: Grader[]; onConfirm(grader: Grader, cert: string): void; onManual(cert: string, grader?: Grader): void; onCancel(): void };
 const isDev = (import.meta as ImportMeta & {env?: Record<string, boolean | undefined>}).env?.DEV;
 export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
   const video = useRef<HTMLVideoElement>(null);
+  const cameraSurface = useRef<HTMLDivElement>(null);
   const camera = useRef<ReturnType<typeof startCamera> | null>(null);
   const pointers = useRef(new Map<number,{x:number;y:number}>());
   const [attempt,setAttempt] = useState(0), [payload,setPayload] = useState<ScanPayload | null>(null);
@@ -29,7 +31,7 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
     return () => {current.stop(); camera.current = null;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',interrupt);};
   },[attempt,payload]);
   function reset() {camera.current?.stop();setPayload(null);setCert('');setGrader('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setStatus('Requesting camera access…');setAttempt(value=>value+1);}
-  async function scanStill() { setStatus('Scanning this frame…'); const result=await camera.current?.scanStill(); if(!result?.raw) setStatus(`Couldn’t read this frame${isDev && result?.failure ? ` (${result.failure})` : ''}. Try adjusting zoom or lighting.`); }
+  async function scanStill() { setStatus('Scanning this frame…'); const surface=cameraSurface.current?.getBoundingClientRect(), target=cameraSurface.current?.querySelector('.scan-target')?.getBoundingClientRect(), v=video.current; const region=surface&&target&&v?.videoWidth ? sourceRect({width:v.videoWidth,height:v.videoHeight},{x:surface.x,y:surface.y,width:surface.width,height:surface.height},{x:target.x,y:target.y,width:target.width,height:target.height}) : undefined; const result=await camera.current?.scanStill(region); if(!result?.raw) setStatus(`Couldn't read that code. Hold it steady and try again, or enter the cert manually.`); }
   async function setZoom(value:number) { const current=await camera.current?.zoom(value); if(current !== undefined) setDiagnostics(previous=>previous?.zoom ? {...previous,zoom:{...previous.zoom,current}} : previous); }
   function distance() { const values=[...pointers.current.values()]; return values.length===2 ? Math.hypot(values[0].x-values[1].x,values[0].y-values[1].y) : 0; }
   const pinchStart = useRef<{distance:number;zoom:number}|null>(null);
@@ -49,7 +51,7 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
       <button className="primary wide" disabled={!grader || !cert.trim()} onClick={()=>{if(grader)onConfirm(grader,cert.trim());}}>Look up certification</button>
     </> : <>
       <div className="scan-header"><button className="scan-icon-button" aria-label="Cancel scan" onClick={()=>{camera.current?.stop();onCancel();}}>×</button><strong>SCAN SLAB</strong>{hasTorch && !error ? <button className="scan-icon-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Flash</button> : <span/>}</div>
-      <div className="scan-camera" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={tapFocus}><video ref={video} muted playsInline aria-label="Live camera preview"/><div className="scan-target" aria-hidden="true"/><span className="scan-target-label">PLACE CODE HERE</span>{focusPoint && <span className="focus-reticle" style={{left:`${focusPoint.x}%`,top:`${focusPoint.y}%`}} aria-hidden="true"/>}</div>
+      <div ref={cameraSurface} className="scan-camera" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={tapFocus}><video ref={video} muted playsInline aria-label="Live camera preview"/><div className="scan-target" aria-hidden="true"/><span className="scan-target-label">PLACE CODE HERE</span>{focusPoint && <span className="focus-reticle" style={{left:`${focusPoint.x}%`,top:`${focusPoint.y}%`}} aria-hidden="true"/>}</div>
       <p role="status" className="scan-status">{error || status}</p>
       {!error && <button className="primary scan-still" onClick={()=>void scanStill()}>Scan this code</button>}
       {diagnostics?.zoom && <label className="scan-zoom"><span>Zoom {diagnostics.zoom.current.toFixed(1)}×</span><input aria-label="Camera zoom" type="range" min={diagnostics.zoom.min} max={diagnostics.zoom.max} step={diagnostics.zoom.step} value={diagnostics.zoom.current} onChange={event=>void setZoom(Number(event.target.value))}/></label>}
