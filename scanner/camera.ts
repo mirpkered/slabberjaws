@@ -7,7 +7,8 @@ export function cameraError(error: unknown): string {
   if (name === 'NotReadableError' || name === 'AbortError') return 'The camera is busy or was interrupted. Close other camera apps and try again, or enter the cert manually.';
   return 'The scanner could not start or continue in this browser. Try again, or enter the cert manually.';
 }
-type Options = { video: HTMLVideoElement; onRead(raw: string): void; onError(message: string): void; onReady(torch: boolean): void };
+export type CameraDiagnostics = { decoder: NonNullable<Decoder['kind']>; formats: string[]; width: number; height: number };
+type Options = { video: HTMLVideoElement; onRead(raw: string): void; onError(message: string): void; onReady(torch: boolean, diagnostics: CameraDiagnostics): void };
 export type CameraDependencies = {
   secure: boolean;
   getMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
@@ -49,7 +50,7 @@ export function startCamera(options: Options, dependencies: CameraDependencies =
     if (!dependencies.secure) { fail('Camera scanning needs a secure HTTPS page. Enter the cert manually here.'); return; }
     if (!dependencies.getMedia) { fail('This browser does not offer camera access. Enter the cert manually.'); return; }
     try {
-      const acquired = await dependencies.getMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+      const acquired = await dependencies.getMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
       if (stopped) { acquired.getTracks().forEach(track => track.stop()); return; }
       stream = acquired;
       stream.getTracks().forEach(track => { track.onended = () => fail('Camera access ended. Rescan to try again, or enter the cert manually.'); });
@@ -60,7 +61,7 @@ export function startCamera(options: Options, dependencies: CameraDependencies =
       if (stopped) { loaded.dispose(); return; }
       decoder = loaded;
       const caps = stream.getVideoTracks()[0]?.getCapabilities?.() as MediaTrackCapabilities & {torch?: boolean};
-      options.onReady(Boolean(caps?.torch));
+      options.onReady(Boolean(caps?.torch), {decoder: decoder.kind ?? 'zxing', formats: decoder.formats ?? [], width: options.video.videoWidth, height: options.video.videoHeight});
       void tick();
     } catch (error) { fail(cameraError(error)); }
   })();

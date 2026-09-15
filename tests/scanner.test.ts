@@ -50,3 +50,8 @@ test('initialization failure stops already acquired camera tracks',async()=>{
   const f=fixture();await startCamera(f.options,{...f.dependencies,decoder:async()=>{throw new Error('init');}}).ready;
   assert.equal(f.counts().stops,1);assert.equal(f.errors.length,1);assert.equal(f.options.video.srcObject,null);
 });
+test('camera requests a high-resolution environment stream for QR detail',async()=>{
+  const f=fixture();let constraints:MediaStreamConstraints|undefined;
+  const camera=startCamera(f.options,{...f.dependencies,getMedia:async value=>{constraints=value;return f.stream;}});await camera.ready;camera.stop();
+  assert.deepEqual(constraints,{video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+});

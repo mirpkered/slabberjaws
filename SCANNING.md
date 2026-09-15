@@ -12,10 +12,13 @@ PDF417 and Aztec. No CDN script is required. The ZXing bundle loads only when
 scanning needs it. See https://github.com/zxing-js/browser for the library API.
 
 Camera access requires HTTPS (GitHub Pages qualifies) or localhost. Rear camera
-is preferred, audio is disabled, and decoding is throttled to roughly five frames
-per second with frames capped at 1280px wide. Safari/WebKit uses the JavaScript
-fallback when native decoding is absent. Focus, glare, barcode size and hardware
-camera permissions affect results; a physical iPhone camera has not been tested.
+is preferred, audio is disabled, and 1920×1080 is requested as an ideal (not
+mandatory) rear-camera resolution. Decoding is throttled to roughly five frames
+per second with source frames capped at 1920px wide. iPhone/iPad WebKit always
+uses the JavaScript fallback because its native QR behavior is inconsistent.
+Development builds show the selected decoder, source dimensions and formats;
+production does not. Focus, glare, barcode size and hardware camera permissions
+affect results; a physical iPhone camera has not been retested after this update.
 Flashlight controls appear only when the track advertises torch support.
 
 The first non-empty decode stops scanning before confirmation. All tracks stop
