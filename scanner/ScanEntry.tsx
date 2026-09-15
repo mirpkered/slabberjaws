@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { NormalizedCard } from '../graders/model';
 import { startCamera, type CameraDiagnostics } from './camera';
 import { parseScanPayload, type ScanPayload } from './payload';
@@ -10,10 +10,11 @@ const isDev = (import.meta as ImportMeta & {env?: Record<string, boolean | undef
 export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const camera = useRef<ReturnType<typeof startCamera> | null>(null);
+  const pointers = useRef(new Map<number,{x:number;y:number}>());
   const [attempt,setAttempt] = useState(0), [payload,setPayload] = useState<ScanPayload | null>(null);
   const [cert,setCert] = useState(''), [grader,setGrader] = useState<Grader | ''>('');
   const [error,setError] = useState(''), [status,setStatus] = useState('Requesting camera access…');
-  const [hasTorch,setHasTorch] = useState(false), [torch,setTorch] = useState(false), [diagnostics,setDiagnostics] = useState<CameraDiagnostics | null>(null);
+  const [hasTorch,setHasTorch] = useState(false), [torch,setTorch] = useState(false), [diagnostics,setDiagnostics] = useState<CameraDiagnostics | null>(null), [focusPoint,setFocusPoint] = useState<{x:number;y:number}|null>(null);
   useEffect(() => {
     if (payload || !video.current) return;
     const current = startCamera({video:video.current,onRead(raw) {
@@ -27,7 +28,14 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
     window.addEventListener('pagehide',interrupt);
     return () => {current.stop(); camera.current = null;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',interrupt);};
   },[attempt,payload]);
-  function reset() {camera.current?.stop();setPayload(null);setCert('');setGrader('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  function reset() {camera.current?.stop();setPayload(null);setCert('');setGrader('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  async function setZoom(value:number) { const current=await camera.current?.zoom(value); if(current !== undefined) setDiagnostics(previous=>previous?.zoom ? {...previous,zoom:{...previous.zoom,current}} : previous); }
+  function distance() { const values=[...pointers.current.values()]; return values.length===2 ? Math.hypot(values[0].x-values[1].x,values[0].y-values[1].y) : 0; }
+  const pinchStart = useRef<{distance:number;zoom:number}|null>(null);
+  function pointerDown(event:PointerEvent<HTMLDivElement>) { if(!diagnostics?.zoom) return; pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY}); if(pointers.current.size===2) { event.currentTarget.setPointerCapture(event.pointerId); pinchStart.current={distance:distance(),zoom:diagnostics.zoom.current}; } }
+  function pointerMove(event:PointerEvent<HTMLDivElement>) { if(!diagnostics?.zoom || !pointers.current.has(event.pointerId)) return; pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY}); if(pinchStart.current && pointers.current.size===2) { event.preventDefault(); const scale=distance()/pinchStart.current.distance; void setZoom(pinchStart.current.zoom*scale); } }
+  function pointerUp(event:PointerEvent<HTMLDivElement>) { pointers.current.delete(event.pointerId); if(pointers.current.size<2) pinchStart.current=null; }
+  async function tapFocus(event:PointerEvent<HTMLDivElement>) { if(!diagnostics?.pointsOfInterest || pointers.current.size>1) return; const rect=event.currentTarget.getBoundingClientRect(), x=(event.clientX-rect.left)/rect.width, y=(event.clientY-rect.top)/rect.height; if(await camera.current?.focusAt(x,y)) { setFocusPoint({x:x*100,y:y*100}); window.setTimeout(()=>setFocusPoint(null),900); } }
   // Raw text exists only in this mounted component. Confirmation emits just grader + cert.
   function manual() {camera.current?.stop();onManual(cert,grader || undefined);}
   return <div className={`scan-entry ${payload ? 'scan-confirmation' : 'scan-active'}`}>
@@ -40,8 +48,9 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
       <button className="primary wide" disabled={!grader || !cert.trim()} onClick={()=>{if(grader)onConfirm(grader,cert.trim());}}>Look up certification</button>
     </> : <>
       <div className="scan-header"><button className="scan-icon-button" aria-label="Cancel scan" onClick={()=>{camera.current?.stop();onCancel();}}>×</button><strong>SCAN SLAB</strong>{hasTorch && !error ? <button className="scan-icon-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Flash</button> : <span/>}</div>
-      <div className="scan-camera"><video ref={video} muted playsInline aria-label="Live camera preview"/><div className="scan-target" aria-hidden="true"/><span className="scan-target-label">PLACE CODE HERE</span></div>
+      <div className="scan-camera" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={tapFocus}><video ref={video} muted playsInline aria-label="Live camera preview"/><div className="scan-target" aria-hidden="true"/><span className="scan-target-label">PLACE CODE HERE</span>{focusPoint && <span className="focus-reticle" style={{left:`${focusPoint.x}%`,top:`${focusPoint.y}%`}} aria-hidden="true"/>}</div>
       <p role="status" className="scan-status">{error || status}</p>
+      {diagnostics?.zoom && <label className="scan-zoom"><span>Zoom {diagnostics.zoom.current.toFixed(1)}×</span><input aria-label="Camera zoom" type="range" min={diagnostics.zoom.min} max={diagnostics.zoom.max} step={diagnostics.zoom.step} value={diagnostics.zoom.current} onChange={event=>void setZoom(Number(event.target.value))}/></label>}
       {isDev && diagnostics && <p className="scan-diagnostics">Decoder: {diagnostics.decoder} · source: {diagnostics.width}×{diagnostics.height} · {diagnostics.formats.join(', ')}</p>}
       <div className="scan-desktop-actions">{hasTorch && !error && <button className="account-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Turn flashlight {torch?'off':'on'}</button>}<button className="text-button" onClick={()=>{camera.current?.stop();onCancel();}}>Cancel scan</button></div>
     </>}

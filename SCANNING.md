@@ -17,8 +17,16 @@ mandatory) rear-camera resolution. Decoding is throttled to roughly five frames
 per second with source frames capped at 1920px wide. iPhone/iPad WebKit always
 uses the JavaScript fallback because its native QR behavior is inconsistent.
 Development builds show the selected decoder, source dimensions and formats;
-production does not. Focus, glare, barcode size and hardware camera permissions
-affect results; a physical iPhone camera has not been retested after this update.
+production does not. During a scan, Slabberjaws checks the active track for
+real zoom, focus modes and points-of-interest support. A zoom slider and camera
+surface pinch handling are shown only when the track provides zoom; they apply
+track constraints, never CSS enlargement. Continuous autofocus is requested
+when reported. Tap focus is attempted only where points-of-interest is exposed
+and the browser accepts the constraint; its reticle represents a successful
+request, not a cosmetic tap. iOS/WebKit often exposes none of these controls,
+which cannot be emulated safely. Focus, glare, barcode size and hardware camera
+permissions affect results; a physical iPhone camera has not been retested
+after this update.
 Flashlight controls appear only when the track advertises torch support.
 
 The first non-empty decode stops scanning before confirmation. All tracks stop

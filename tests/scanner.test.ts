@@ -55,3 +55,12 @@ test('camera requests a high-resolution environment stream for QR detail',async(
   const camera=startCamera(f.options,{...f.dependencies,getMedia:async value=>{constraints=value;return f.stream;}});await camera.ready;camera.stop();
   assert.deepEqual(constraints,{video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
 });
+test('camera exposes only real zoom controls and clamps track zoom constraints',async()=>{
+  const f=fixture();const applied:unknown[]=[];
+  const track={...f.track,getCapabilities:()=>({torch:true,zoom:{min:1,max:3,step:.5},focusMode:['continuous']}),getSettings:()=>({zoom:1,focusMode:'continuous'}),applyConstraints:async(value:unknown)=>{applied.push(value);}};
+  const stream={getTracks:()=>[track],getVideoTracks:()=>[track]} as unknown as MediaStream;
+  let details:unknown;const options={...f.options,onReady:(_torch:boolean,value:unknown)=>{details=value;}};
+  const camera=startCamera(options,{...f.dependencies,getMedia:async()=>stream,decoder:async()=>({decode:async()=>undefined,dispose(){}})});await camera.ready;
+  assert.deepEqual(details,{decoder:'zxing',formats:[],width:640,height:undefined,label:'',torch:true,zoom:{min:1,max:3,step:.5,current:1},focusModes:['continuous'],focusMode:'continuous',pointsOfInterest:false});
+  await camera.zoom(10);assert.deepEqual(applied.at(-1),{advanced:[{zoom:3}]});camera.stop();
+});
