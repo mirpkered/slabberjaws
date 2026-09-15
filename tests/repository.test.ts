@@ -65,3 +65,11 @@ test("repository selection follows authentication state",()=>{
   const fakeClient={} as SupabaseClient;
   assert.ok(selectRepository({storage,client:fakeClient,userId:"user-1"}) instanceof SupabaseCollectionRepository);
 });
+
+test("new grader names persist and retain separate duplicate identities",async()=>{
+  const repository=new LocalStorageCollectionRepository(new MemoryStorage());
+  await repository.addCard(card({grader:"GMA",certNumber:"12345"}));
+  await repository.addCard(card({id:crypto.randomUUID(),grader:"Integrity Grading",certNumber:"12345"}));
+  assert.equal(await repository.hasCard("GMA","12345"),true);
+  assert.deepEqual((await repository.getCards()).map(value=>value.grader).sort(),["GMA","Integrity Grading"]);
+});

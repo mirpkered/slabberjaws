@@ -17,6 +17,6 @@ Deno.serve(async(request)=>{
   if(request.method!=="POST")return json({ok:false,code:"UNSUPPORTED_GRADER",message:"Use POST /lookup."},405,origin);
   let input:{grader?:unknown;certNumber?:unknown};
   try{input=await request.json()}catch{return json({ok:false,code:"INVALID_CERT",message:"The request body must be valid JSON."},400,origin)}
-  const result=await routeLookup(input,{degree:lookupDegree,psa:(certNumber)=>lookupPsa(certNumber,Deno.env.get("PSA_API_TOKEN"))});
+  const result=await routeLookup(input,{degree:lookupDegree,psa:(certNumber)=>lookupPsa(certNumber,Deno.env.get("PSA_API_TOKEN")),cgc:async()=>({ok:false,code:"LOOKUP_BLOCKED",message:"CGC’s public card lookup currently requires a browser security challenge, so this certification could not be checked automatically."})});
   return json(result,status(result),origin);
 });

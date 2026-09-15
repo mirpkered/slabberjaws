@@ -24,7 +24,8 @@ test("lookup router returns normalized failures and success payloads",async()=>{
   const dependencies={degree:async()=>({ok:false,code:"CERT_NOT_FOUND",message:"Missing"} as const),psa:async()=>({ok:true,card:createManualCard("PSA","94877724")} as const)};
   assert.equal((await routeLookup({grader:"degree",certNumber:"00409451"},dependencies)).ok,false);
   const success=await routeLookup({grader:"psa",certNumber:"94877724"},dependencies);assert.equal(success.ok,true);
-  const unsupported=await routeLookup({grader:"cgc",certNumber:"6126303210"},dependencies);assert.deepEqual(unsupported,{ok:false,code:"UNSUPPORTED_GRADER",message:"Automatic lookup is not supported for this grader."});
+  const blocked=await routeLookup({grader:"cgc",certNumber:"6126303210"},dependencies);assert.equal(blocked.ok,false);if(!blocked.ok)assert.equal(blocked.code,"LOOKUP_BLOCKED");
+  const gma=await routeLookup({grader:"gma",certNumber:"12345"},dependencies);assert.equal(gma.ok,false);if(!gma.ok)assert.equal(gma.code,"UNSUPPORTED_GRADER");
 });
 
 test("manual fallback preserves grader and certification number",()=>{

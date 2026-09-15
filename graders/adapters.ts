@@ -5,4 +5,6 @@ export const psa=unavailable("PSA",/^\d{8,10}$/,"PSA lookup requires a server-he
 export const cgc=unavailable("CGC",/^\d{10}$/,"CGC verification parsing is not enabled yet.");
 export const pgs=unavailable("PGS",/^\d+$/,"PGS automatic lookup is not yet supported.");
 export const collectDirect=unavailable("Collect Direct",/^\d+$/,"Collect Direct automatic lookup is not yet supported.");
-export const adapters={Degree:degree,PSA:psa,CGC:cgc,PGS:pgs,"Collect Direct":collectDirect};
+export const gma=unavailable("GMA",/^.+$/,"GMA does not publish a public certification lookup. Enter this slab manually.");
+export const integrityGrading=unavailable("Integrity Grading",/^.+$/,"Integrity Grading automatic lookup is not yet supported. Enter this slab manually.");
+export const adapters={Degree:degree,PSA:psa,CGC:cgc,PGS:pgs,"Collect Direct":collectDirect,GMA:gma,"Integrity Grading":integrityGrading};

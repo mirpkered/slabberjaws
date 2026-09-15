@@ -87,7 +87,7 @@ const seed: Card[] = [
     addedAt: "2026-09-12",
   },
 ];
-const graders: Grader[] = ["Degree", "PSA", "CGC", "PGS", "Collect Direct"];
+const graders: Grader[] = ["Degree", "PSA", "CGC", "PGS", "Collect Direct", "GMA", "Integrity Grading"];
 
 function CardImage({ card, large = false }: { card: Card; large?: boolean }) {
   const [failed, setFailed] = useState(false);

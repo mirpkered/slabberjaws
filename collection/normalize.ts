@@ -1,11 +1,10 @@
 import type { NormalizedCard } from "../graders/model.ts";
 
-const graders = ["Degree", "PSA", "CGC", "PGS", "Collect Direct"] as const;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export function normalizeCard(value: unknown): NormalizedCard | null {
-  if (!isRecord(value) || !graders.includes(value.grader as (typeof graders)[number])) return null;
+  if (!isRecord(value) || typeof value.grader !== "string" || !value.grader.trim()) return null;
   const certNumber = String(value.certNumber ?? "").replace(/\s/g, "");
   if (!certNumber) return null;
   const populationValue = value.population;
@@ -15,7 +14,7 @@ export function normalizeCard(value: unknown): NormalizedCard | null {
 
   return {
     id: typeof value.id === "string" && value.id ? value.id : crypto.randomUUID(),
-    grader: value.grader as NormalizedCard["grader"],
+    grader: value.grader.trim(),
     certNumber,
     grade: String(value.grade ?? ""),
     year: String(value.year ?? ""),
