@@ -735,6 +735,12 @@ export default function Home() {
                   if (selected) setLookupGrader(selected);
                   setStep("lookup");
                 }}
+                onManualDetails={(selected, value) => {
+                  setLookupGrader(selected);
+                  setCert(value);
+                  setDraft(createManualCard(selected, value));
+                  setStep("manual");
+                }}
                 onConfirm={(selected, value) => {
                   setStep("lookup");
                   void beginLookup({ grader: selected, certNumber: value });

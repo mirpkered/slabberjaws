@@ -3,12 +3,13 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import type { NormalizedCard } from '../graders/model';
 import { startCamera, type CameraDiagnostics } from './camera';
 import { parseScanPayload, type ScanPayload } from './payload';
+import { classifyScanPayload } from './payload-classification';
 import { sourceRect } from './frame';
 
 type Grader = NormalizedCard['grader'];
-type Props = { graders: Grader[]; onConfirm(grader: Grader, cert: string): void; onManual(cert: string, grader?: Grader): void; onCancel(): void };
+type Props = { graders: Grader[]; onConfirm(grader: Grader, cert: string): void; onManual(cert: string, grader?: Grader): void; onManualDetails(grader: Grader, cert: string): void; onCancel(): void };
 const isDev = (import.meta as ImportMeta & {env?: Record<string, boolean | undefined>}).env?.DEV;
-export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
+export function ScanEntry({graders,onConfirm,onManual,onManualDetails,onCancel}: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const cameraSurface = useRef<HTMLDivElement>(null);
   const camera = useRef<ReturnType<typeof startCamera> | null>(null);
@@ -44,12 +45,13 @@ export function ScanEntry({graders,onConfirm,onManual,onCancel}: Props) {
   function manual() {camera.current?.stop();onManual(cert,grader || undefined);}
   return <div className={`scan-entry ${payload ? 'scan-confirmation' : 'scan-active'}`}>
     {payload ? <>
-      <h3>Which grading company is this?</h3>
+      {(() => { const classification=classifyScanPayload(payload.rawPayload); return classification.kind==='generic-grader-url' ? <div className="generic-url-flow"><p className="eyebrow">CODE READ SUCCESSFULLY</p><h3>This QR code links to the grading company’s website.</h3><p className="muted">It doesn’t contain a certification number. Enter the number printed on your slab to continue.</p><label className="field">Grading company<select value={grader} onChange={event=>setGrader(event.target.value as Grader)}><option value="">Suggested: {classification.suggestedGrader} — confirm company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label><label className="field">Certification number<input autoFocus value={cert} onChange={event=>setCert(event.target.value)} inputMode="text" autoComplete="off"/></label><button className="primary wide" disabled={!grader||!cert.trim()} onClick={()=>{if(grader)onManualDetails(grader,cert.trim())}}>Continue to card details</button><details className="raw-payload"><summary>Decoded raw data</summary><code>{payload.rawPayload}</code><button type="button" className="account-button" onClick={()=>void copyRaw()}>Copy raw data</button>{copyStatus&&<p role="status">{copyStatus}</p>}</details></div> : <><h3>Which grading company is this?</h3>
       <p className="muted">Check the slab label and confirm the certification number.</p>
       {!payload.certNumber && <><p role="status" className="form-message">The code was read, but a certification number could not be identified safely. Type it below or rescan.</p><section className="raw-payload" aria-label="Decoded raw data"><strong>DECODED RAW DATA</strong><code>{payload.rawPayload}</code><button type="button" className="account-button" onClick={()=>void copyRaw()}>Copy raw data</button>{copyStatus&&<p role="status">{copyStatus}</p>}</section></>}
       <label className="field">Grading company<select value={grader} onChange={event=>setGrader(event.target.value as Grader)}><option value="">Choose a grading company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label>
       <label className="field">Decoded certification number<input value={cert} onChange={event=>setCert(event.target.value)} autoComplete="off" spellCheck={false}/></label>
       <button className="primary wide" disabled={!grader || !cert.trim()} onClick={()=>{if(grader)onConfirm(grader,cert.trim());}}>Look up certification</button>
+      </>})()}
     </> : <>
       <div className="scan-header"><button className="scan-icon-button" aria-label="Cancel scan" onClick={()=>{camera.current?.stop();onCancel();}}>×</button><strong>SCAN SLAB</strong>{hasTorch && !error ? <button className="scan-icon-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Flash</button> : <span/>}</div>
       <div ref={cameraSurface} className="scan-camera" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onClick={tapFocus}><video ref={video} muted playsInline aria-label="Live camera preview"/><div className="scan-target" aria-hidden="true"/><span className="scan-target-label">PLACE CODE HERE</span>{focusPoint && <span className="focus-reticle" style={{left:`${focusPoint.x}%`,top:`${focusPoint.y}%`}} aria-hidden="true"/>}</div>
