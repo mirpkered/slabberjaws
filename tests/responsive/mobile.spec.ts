@@ -38,6 +38,14 @@ for (const [width,height] of sizes) {
     await page.locator('.auth-modal .close').click();
     await page.locator('.desktop-add').click();
     await fits(page);
+    await page.getByRole('button',{name:'Photograph Slab'}).click();
+    await expect(page.locator('.photo-entry')).toBeVisible();
+    await fits(page);
+    await page.getByLabel('Grading company').selectOption('Degree');
+    await page.getByRole('button',{name:'Continue to photos'}).click();
+    await fits(page);
+    await page.getByRole('button',{name:'Back'}).click();
+    await page.getByRole('button',{name:'Back to Add Card'}).click();
     await page.getByLabel('Certification number').fill('00409451');
     await page.getByRole('button',{name:'Look up certificate'}).click();
     await expect(page.locator('.lookup-failed')).toBeVisible();

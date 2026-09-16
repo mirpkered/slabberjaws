@@ -889,3 +889,22 @@ a:focus-visible {
 .field select:focus {
   box-shadow: 0 0 0 2px #28a8e845;
 }
+
+/* Temporary, device-only slab-photo review. No captured image is persisted. */
+.photo-entry { min-width: 0; }
+.photo-entry h3 { font-family: Georgia, serif; font-size: 1.45rem; margin: 12px 0 8px; }
+.photo-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.photo-review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; align-items: start; }
+.photo-review-grid figure { min-width: 0; margin: 0; border: 1px solid var(--border); background: #15191d; }
+.photo-review-grid img { display: block; width: 100%; height: 190px; object-fit: contain; background: #101315; }
+.photo-review-grid figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; font-size: .78rem; font-weight: 800; text-transform: uppercase; }
+.photo-review-grid .text-button { min-height: 36px; margin: 0; padding: 0; font-size: .76rem; }
+.photo-missing { border: 1px dashed var(--border); color: var(--text-muted); padding: 22px 12px; text-align: center; margin: 0; }
+.photo-ocr-text { margin-top: 18px; color: var(--text-muted); }
+.photo-ocr-text summary { cursor: pointer; font-weight: 800; }
+.photo-ocr-text pre { max-height: 140px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); padding: 10px; font: .78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 640px) {
+  .photo-review-grid { grid-template-columns: 1fr; }
+  .photo-review-grid img { height: min(48vw, 250px); }
+  .photo-entry .primary, .photo-entry .account-button { min-height: 44px; }
+}

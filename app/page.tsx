@@ -28,6 +28,8 @@ import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { lookupCertification } from "../lookup/client";
 import { createManualCard } from "../lookup/manual";
 import { ScanEntry } from "../scanner/ScanEntry";
+import { PhotoEntry } from "../photo/PhotoEntry";
+import type { PhotoFields } from "../photo/extract";
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
@@ -120,7 +122,7 @@ export default function Home() {
     [addOpen, setAddOpen] = useState(false),
     [detail, setDetail] = useState<Card | null>(null),
     [step, setStep] = useState<
-      "lookup" | "failed" | "manual" | "preview" | "scan"
+      "lookup" | "failed" | "manual" | "preview" | "scan" | "photos"
     >("lookup"),
     [lookupGrader, setLookupGrader] = useState<Grader>("Degree"),
     [cert, setCert] = useState(""),
@@ -337,7 +339,7 @@ export default function Home() {
   }
   function closeAdd() {
     setAddOpen(false);
-    if (step === "scan") setStep("lookup");
+    if (step === "scan" || step === "photos") setStep("lookup");
   }
   function beginManual() {
     setDraft(createManualCard(lookupGrader, cert));
@@ -724,6 +726,8 @@ export default function Home() {
                   ? "Verify card"
                   : step === "scan"
                     ? "Scan slab"
+                    : step === "photos"
+                      ? "Photograph slab"
                     : "Add to your vault"}
             </h2>
             {step === "scan" && (
@@ -747,6 +751,23 @@ export default function Home() {
                 }}
               />
             )}
+            {step === "photos" && (
+              <PhotoEntry
+                graders={graders}
+                onCancel={() => setStep("lookup")}
+                onManualDetails={(selected, fields: PhotoFields) => {
+                  setLookupGrader(selected);
+                  setCert(fields.certNumber);
+                  setDraft({
+                    ...createManualCard(selected, fields.certNumber),
+                    ...fields,
+                    grader: selected,
+                    certNumber: fields.certNumber,
+                  });
+                  setStep("manual");
+                }}
+              />
+            )}
             {step === "lookup" && (
               <>
                 <button
@@ -755,6 +776,13 @@ export default function Home() {
                   onClick={() => setStep("scan")}
                 >
                   Scan Slab
+                </button>
+                <button
+                  className="account-button scan-launch"
+                  disabled={looking}
+                  onClick={() => setStep("photos")}
+                >
+                  Photograph Slab
                 </button>
                 <button
                   className="text-button"
