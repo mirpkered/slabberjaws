@@ -903,8 +903,21 @@ a:focus-visible {
 .photo-ocr-text { margin-top: 18px; color: var(--text-muted); }
 .photo-ocr-text summary { cursor: pointer; font-weight: 800; }
 .photo-ocr-text pre { max-height: 140px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); padding: 10px; font: .78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.photo-lighting { color: var(--text-muted); font-size: .85rem; line-height: 1.45; margin: 16px 0; }
+.crop-stage { position: relative; width: 100%; max-height: 50dvh; overflow: hidden; background: #101315; touch-action: none; user-select: none; }
+.crop-stage > img { display: block; width: 100%; max-height: 50dvh; object-fit: contain; }
+.crop-box { position: absolute; border: 2px solid var(--accent-highlight); box-shadow: 0 0 0 9999px #0008; touch-action: none; cursor: move; min-width: 8%; min-height: 8%; }
+.crop-handle { position: absolute; right: -12px; bottom: -12px; width: 24px; height: 24px; border: 2px solid var(--bg); background: var(--accent-highlight); border-radius: 50%; cursor: nwse-resize; }
+.photo-candidates { display: grid; gap: 8px; margin-top: 18px; padding: 12px; border-left: 4px solid var(--accent); background: var(--surface-raised); }
+.photo-candidates > div { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; font-size: .85rem; overflow-wrap: anywhere; }
+.photo-candidates .text-button { margin: 0; min-height: 38px; padding: 4px; }
+.photo-ocr-text section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
 @media (max-width: 640px) {
   .photo-review-grid { grid-template-columns: 1fr; }
   .photo-review-grid img { height: min(48vw, 250px); }
   .photo-entry .primary, .photo-entry .account-button { min-height: 44px; }
+  .crop-stage { max-height: 48dvh; }
+  .crop-stage > img { max-height: 48dvh; }
+  .photo-candidates > div { grid-template-columns: minmax(0,1fr) auto; }
+  .photo-candidates .text-button { grid-column: 2; }
 }

@@ -1,98 +1,33 @@
 "use client";
+import {useEffect,useRef,useState,type PointerEvent} from 'react';
+import type {NormalizedCard} from '../graders/model';
+import {emptyPhotoFields,extractPhotoFields,mergeOcrFields,type Candidate,type PhotoFields} from './extract';
+import {fullCrop,sourceCrop,type Crop,validCrop} from './crop';
+type Grader=NormalizedCard['grader'];type Side='front'|'back';type Region='whole'|'label';
+type Shot={file:File;url:string;whole:Crop;label:Crop|null};type Result={text:string;confidence:number;enhanced:boolean};
+type Props={graders:Grader[];onCancel():void;onManualDetails(grader:Grader,fields:PhotoFields):void};
+type Worker={recognize(image:File):Promise<{data:{text:string;confidence:number}}>;terminate():Promise<unknown>};
+const regions=(side:Side,shot:Shot)=>[{side,region:'whole' as Region,crop:shot.whole},{side,region:'label' as Region,crop:shot.label}].filter((x):x is {side:Side;region:Region;crop:Crop}=>!!x.crop);
 
-import { useEffect, useRef, useState } from "react";
-import type { NormalizedCard } from "../graders/model";
-import { emptyPhotoFields, extractPhotoFields, type PhotoFields } from "./extract";
-
-type Grader = NormalizedCard["grader"];
-type PhotoSide = "front" | "back";
-type Props = {
-  graders: Grader[];
-  onCancel(): void;
-  onManualDetails(grader: Grader, fields: PhotoFields): void;
-};
-type OcrWorker = { recognize(image: File): Promise<{ data: { text: string } }>; terminate(): Promise<unknown> };
-
-export function PhotoEntry({ graders, onCancel, onManualDetails }: Props) {
-  const [grader, setGrader] = useState<Grader | "">("");
-  const [phase, setPhase] = useState<"company" | "front" | "back" | "review" | "results">("company");
-  const [front, setFront] = useState<File | null>(null);
-  const [back, setBack] = useState<File | null>(null);
-  const [frontUrl, setFrontUrl] = useState("");
-  const [backUrl, setBackUrl] = useState("");
-  const [ocrFront, setOcrFront] = useState("");
-  const [ocrBack, setOcrBack] = useState("");
-  const [fields, setFields] = useState<PhotoFields>(emptyPhotoFields);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const frontInput = useRef<HTMLInputElement>(null);
-  const backInput = useRef<HTMLInputElement>(null);
-  const worker = useRef<OcrWorker | null>(null);
-
-  useEffect(() => () => {
-    if (frontUrl) URL.revokeObjectURL(frontUrl);
-    if (backUrl) URL.revokeObjectURL(backUrl);
-    void worker.current?.terminate();
-  }, [frontUrl, backUrl]);
-
-  function choose(side: PhotoSide, file?: File) {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    if (side === "front") {
-      if (frontUrl) URL.revokeObjectURL(frontUrl);
-      setFront(file); setFrontUrl(url); setPhase("back");
-    } else {
-      if (backUrl) URL.revokeObjectURL(backUrl);
-      setBack(file); setBackUrl(url); setPhase("review");
-    }
-    setError("");
-  }
-  function retake(side: PhotoSide) {
-    if (side === "front") frontInput.current?.click();
-    else backInput.current?.click();
-  }
-  async function runOcr() {
-    if (!front && !back) { setError("Take at least one photo before reviewing the label."); return; }
-    setBusy(true); setError("");
-    try {
-      // Tesseract runs in a browser worker; image files never leave this device.
-      const module = await import("tesseract.js");
-      const active = await module.createWorker("eng", 1, { logger: () => undefined });
-      worker.current = active as OcrWorker;
-      const frontText = front ? (await active.recognize(front)).data.text : "";
-      const backText = back ? (await active.recognize(back)).data.text : "";
-      setOcrFront(frontText); setOcrBack(backText); setFields(extractPhotoFields(frontText, backText));
-      await active.terminate(); worker.current = null; setPhase("results");
-    } catch {
-      setError("We couldn't read those photos. Retake them with the label clear and evenly lit, then try again.");
-    } finally {
-      // Release the OCR worker on success and failure; it holds no persisted image state.
-      if (worker.current) { await worker.current.terminate(); worker.current = null; }
-      setBusy(false);
-    }
-  }
-  function update(key: keyof PhotoFields, value: string) { setFields((current) => ({ ...current, [key]: value })); }
-  function clearAndCancel() {
-    // Files and object URLs are released by unmounting; no image is persisted or uploaded.
-    setFront(null); setBack(null); setOcrFront(""); setOcrBack(""); setFields(emptyPhotoFields()); onCancel();
-  }
-  const capture = (side: PhotoSide) => <>
-    <input ref={side === "front" ? frontInput : backInput} className="photo-file-input" type="file" accept="image/*" capture="environment" aria-label={`Take or choose ${side} slab photo`} onChange={(event) => choose(side, event.target.files?.[0])} />
-    <button className="primary wide" type="button" onClick={() => side === "front" ? frontInput.current?.click() : backInput.current?.click()}>
-      {side === "front" ? "Take front photo" : "Take back photo"}
-    </button>
-  </>;
-  if (phase === "company") return <div className="photo-entry">
-    <h3>Photograph a slab</h3><p className="muted">Choose the grading company first, then photograph the front and back label. Images are used only in this browser for review.</p>
-    <label className="field">Grading company<select value={grader} onChange={(event) => setGrader(event.target.value as Grader)}><option value="">Choose a grading company</option>{graders.map((value) => <option key={value}>{value}</option>)}</select></label>
-    <button className="primary wide" disabled={!grader} onClick={() => setPhase("front")}>Continue to photos</button><button className="text-button" onClick={onCancel}>Back to Add Card</button>
-  </div>;
-  if (phase === "front" || phase === "back") {
-    const side = phase;
-    return <div className="photo-entry"><p className="eyebrow">{grader} · {side === "front" ? "PHOTO 1 OF 2" : "PHOTO 2 OF 2"}</p><h3>{side === "front" ? "Photograph the front label" : "Photograph the back label"}</h3><p className="muted">Keep the slab flat, fill the frame with the label, and avoid glare. You can use the camera or choose an existing photo.</p>{capture(side)}
-      {side === "back" && <button className="text-button" onClick={() => setPhase("review")}>Continue with front photo only</button>}
-      <button className="text-button" onClick={() => side === "front" ? setPhase("company") : setPhase("front")}>Back</button></div>;
-  }
-  if (phase === "review") return <div className="photo-entry"><h3>Review photos</h3><p className="muted">Photos stay temporarily on this device and are discarded when you leave this flow.</p><div className="photo-review-grid">{frontUrl ? <figure><img src={frontUrl} alt="Front slab label preview"/><figcaption>Front <button type="button" className="text-button" onClick={() => retake("front")}>Retake</button></figcaption></figure> : <p className="photo-missing">No front photo</p>}{backUrl ? <figure><img src={backUrl} alt="Back slab label preview"/><figcaption>Back <button type="button" className="text-button" onClick={() => retake("back")}>Retake</button></figcaption></figure> : <button className="account-button" onClick={() => setPhase("back")}>Add back photo</button>}</div>{error && <p role="status" className="form-message">{error}</p>}<button className="primary wide" disabled={busy} onClick={() => void runOcr()}>{busy ? "Reading labels…" : "Read label text"}</button><button className="text-button" onClick={() => setPhase("front")}>Take another photo</button></div>;
-  return <div className="photo-entry photo-results"><p className="eyebrow">OCR REVIEW</p><h3>Review detected details</h3><p className="muted">Confirm or correct every field before continuing. OCR can misread slab labels.</p><div className="manual-grid">{([['certNumber','Certification number'],['grade','Grade'],['year','Year'],['brand','Brand'],['set','Set'],['subject','Subject / card name'],['cardNumber','Card number']] as [keyof PhotoFields,string][]).map(([key,label]) => <label key={key} className="field">{label}<input value={fields[key]} onChange={(event) => update(key,event.target.value)} autoComplete="off" /></label>)}</div>{!fields.certNumber.trim() && <p className="form-message">No certification number was detected. Enter the printed number before saving the card.</p>}<details className="photo-ocr-text"><summary>View recognized text</summary><p><strong>Front</strong></p><pre>{ocrFront || "No front text read."}</pre><p><strong>Back</strong></p><pre>{ocrBack || "No back text read."}</pre></details><button className="primary wide" onClick={() => { if (grader) onManualDetails(grader, { ...fields, certNumber: fields.certNumber.trim() }); }}>Continue to card details</button><button className="text-button" onClick={() => setPhase("review")}>Back to photos</button><button className="text-button" onClick={clearAndCancel}>Cancel</button></div>;
+export function PhotoEntry({graders,onCancel,onManualDetails}:Props){
+ const [grader,setGrader]=useState<Grader|''>(''),[phase,setPhase]=useState<'company'|'capture'|'crop'|'label'|'review'|'results'>('company'),[side,setSide]=useState<Side>('front'),[front,setFront]=useState<Shot|null>(null),[back,setBack]=useState<Shot|null>(null),[crop,setCrop]=useState(fullCrop()),[results,setResults]=useState<Record<string,Result>>({}),[fields,setFields]=useState(emptyPhotoFields),[candidates,setCandidates]=useState<Candidate[]>([]),[edited,setEdited]=useState(new Set<keyof PhotoFields>()),[busy,setBusy]=useState(false),[error,setError]=useState(''),[hint,setHint]=useState(true);
+ const input=useRef<HTMLInputElement>(null),worker=useRef<Worker|null>(null),run=useRef(0),urls=useRef(new Set<string>());
+ useEffect(()=>()=>{urls.current.forEach(url=>URL.revokeObjectURL(url));urls.current.clear();void worker.current?.terminate();run.current++;},[]);
+ const shot=side==='front'?front:back;
+ function take(file?:File){if(!file)return;const current=side==='front'?front:back;if(current){URL.revokeObjectURL(current.url);urls.current.delete(current.url);}const next={file,url:URL.createObjectURL(file),whole:fullCrop(),label:null};urls.current.add(next.url);if(side==='front')setFront(next);else setBack(next);setCrop(fullCrop());setPhase('crop');setError('');}
+ function storeCrop(region:Region){if(!shot)return;const c=validCrop(crop);const next={...shot,[region]:c};if(side==='front')setFront(next);else setBack(next);if(region==='whole'){setCrop(fullCrop());setPhase('label');}else setPhase(side==='front'?'capture':'review');}
+ function resetCrop(){setCrop(fullCrop());}
+ function retake(which:Side){setSide(which);setPhase('capture');}
+ async function cropFile(file:File,crop:Crop,enhance=false){const image=await createImageBitmap(file);const rect=sourceCrop(crop,image.width,image.height),canvas=document.createElement('canvas');canvas.width=enhance?Math.min(2400,rect.width*2):rect.width;canvas.height=enhance?Math.min(2400,rect.height*2):rect.height;const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas unavailable');ctx.filter=enhance?'grayscale(1) contrast(1.45)':'none';ctx.drawImage(image,rect.x,rect.y,rect.width,rect.height,0,0,canvas.width,canvas.height);image.close();const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/jpeg',.92));canvas.width=canvas.height=0;if(!blob)throw new Error('Image crop unavailable');return new File([blob],`ocr-${Date.now()}.jpg`,{type:'image/jpeg'});}
+ async function recognize(workerInstance:Worker,source:File,c:Crop){const normal=await cropFile(source,c);try{let result=await workerInstance.recognize(normal);let selected={text:result.data.text,confidence:result.data.confidence,enhanced:false};if(selected.confidence<55){const enhanced=await cropFile(source,c,true);try{const retry=await workerInstance.recognize(enhanced);if(retry.data.confidence>selected.confidence)selected={text:retry.data.text,confidence:retry.data.confidence,enhanced:true};}finally{enhanced.size;}}return selected;}finally{normal.size;}}
+ async function runOcr(){const id=++run.current;const targets=[...(front?regions('front',front):[]),...(back?regions('back',back):[])].filter(target=>target.region==='whole'||JSON.stringify(target.crop)!==JSON.stringify(target.side==='front'?front!.whole:back!.whole));if(!targets.length){setError('Take at least one slab photo first.');return;}setBusy(true);setError('');try{const module=await import('tesseract.js'),active=await module.createWorker('eng',1,{logger:()=>undefined});worker.current=active as Worker;const found:Record<string,Result>={};for(const target of targets){const source=target.side==='front'?front!.file:back!.file;found[`${target.side}-${target.region}`]=await recognize(worker.current,source,target.crop);if(id!==run.current)return;}if(id!==run.current)return;setResults(found);const parsed=extractPhotoFields(...Object.values(found).map(x=>x.text));setFields(current=>mergeOcrFields(current,parsed.fields,edited));setCandidates(parsed.candidates);setPhase('results');}catch{if(id===run.current)setError("We couldn't read those crops. Adjust the crop, reduce glare, or retake the photo and try again.");}finally{if(worker.current){await worker.current.terminate();worker.current=null;}if(id===run.current)setBusy(false);}}
+ function update(key:keyof PhotoFields,value:string){setEdited(old=>new Set(old).add(key));setFields(old=>({...old,[key]:value}));}
+ function accept(candidate:Candidate){update(candidate.field,candidate.value);setCandidates(old=>old.filter(x=>x!==candidate));}
+ const DragCrop=()=>{const start=useRef<{x:number;y:number;crop:Crop;mode:string}|null>(null);const stage=(element:HTMLElement)=>element.closest('.crop-stage')!.getBoundingClientRect();function down(e:PointerEvent<HTMLElement>,mode:string){start.current={x:e.clientX,y:e.clientY,crop,mode};e.currentTarget.setPointerCapture(e.pointerId);}function move(e:PointerEvent<HTMLElement>){if(!start.current)return;const r=stage(e.currentTarget),s=start.current,dx=(e.clientX-s.x)/r.width*100,dy=(e.clientY-s.y)/r.height*100;setCrop(validCrop(s.mode==='move'?{...s.crop,x:s.crop.x+dx,y:s.crop.y+dy}:{...s.crop,width:s.crop.width+dx,height:s.crop.height+dy}));}return <div className="crop-box" style={{left:`${crop.x}%`,top:`${crop.y}%`,width:`${crop.width}%`,height:`${crop.height}%`}} onPointerDown={e=>down(e,'move')} onPointerMove={move} onPointerUp={()=>start.current=null} aria-label="Adjustable crop area"><span className="crop-handle" onPointerDown={e=>down(e,'resize')} /></div>};
+ const capture=<><input ref={input} className="photo-file-input" type="file" accept="image/*" capture="environment" onChange={e=>take(e.target.files?.[0])}/><button className="primary wide" onClick={()=>input.current?.click()}>Take {side} photo</button><p className="photo-lighting">Keep the label in focus. Avoid reflections by angling light, use a contrasting background, and move closer without cutting off the label. Your device camera controls flash where available.</p></>;
+ if(phase==='company')return <div className="photo-entry"><h3>Photograph a slab</h3><p className="muted">Choose the grading company, then take front and back photos. Images stay only in this browser while you review them.</p><label className="field">Grading company<select value={grader} onChange={e=>setGrader(e.target.value as Grader)}><option value="">Choose a grading company</option>{graders.map(x=><option key={x}>{x}</option>)}</select></label><button className="primary wide" disabled={!grader} onClick={()=>{setSide('front');setPhase('capture')}}>Continue to photos</button><button className="text-button" onClick={onCancel}>Back to Add Card</button></div>;
+ if(phase==='capture')return <div className="photo-entry"><p className="eyebrow">{grader} · {side==='front'?'PHOTO 1 OF 2':'PHOTO 2 OF 2'}</p><h3>Photograph the {side} of the slab</h3>{capture}{side==='back'&&front&&<button className="text-button" onClick={()=>setPhase('review')}>Continue with front only</button>}<button className="text-button" onClick={()=>side==='front'?setPhase('company'):(setSide('front'),setPhase('capture'))}>Back</button></div>;
+ if((phase==='crop'||phase==='label')&&shot)return <div className="photo-entry crop-step"><p className="eyebrow">{phase==='crop'?'WHOLE SLAB CROP':'OPTIONAL LABEL CROP'}</p><h3>{phase==='crop'?'Remove surrounding background':'Select the grading label, if helpful'}</h3><p className="muted">Drag the rectangle and use its lower-right handle to resize. {phase==='label'?'Skip this if the whole slab crop is clearer.':'Keep all useful slab text inside the crop.'}</p><div className="crop-stage"><img src={shot.url} alt={`Original ${side} slab photograph`}/><DragCrop/></div><button className="primary wide" onClick={()=>storeCrop(phase==='crop'?'whole':'label')}>{phase==='crop'?'Confirm whole-slab crop':'Use label crop'}</button>{phase==='label'&&<button className="account-button wide" onClick={()=>{if(side==='front'){setSide('back');setPhase('capture')}else setPhase('review')}}>Skip label crop</button>}<button className="text-button" onClick={resetCrop}>Reset to full photograph</button><button className="text-button" onClick={()=>retake(side)}>Retake {side} photo</button></div>;
+ if(phase==='review')return <div className="photo-entry"><h3>Review crops</h3><div className="photo-review-grid">{(['front','back']as Side[]).map(which=>{const item=which==='front'?front:back;return item?<figure key={which}><img src={item.url} alt={`${which} slab crop preview`}/><figcaption>{which} <button className="text-button" onClick={()=>{setSide(which);setCrop(item.whole);setPhase('crop')}}>Adjust crop</button></figcaption></figure>:<button key={which} className="account-button" onClick={()=>retake(which)}>Add {which} photo</button>})}</div>{error&&<p className="form-message">{error}</p>}<button className="primary wide" disabled={busy} onClick={()=>void runOcr()}>{busy?'Reading cropped labels…':'Read label text'}</button></div>;
+ return <div className="photo-entry photo-results"><p className="eyebrow">OCR REVIEW</p><h3>Review detected details</h3><p className="muted">High-confidence labelled values are filled in. Suggestions need your review and every value can be corrected.</p><div className="manual-grid">{([['certNumber','Certification number'],['grade','Grade'],['year','Year'],['brand','Brand'],['set','Set'],['subject','Subject / card name'],['cardNumber','Card number'],['variant','Variant']]as[keyof PhotoFields,string][]).map(([key,label])=><label className="field" key={key}>{label}<input value={fields[key]} onChange={e=>update(key,e.target.value)}/></label>)}</div>{candidates.length>0&&<section className="photo-candidates"><strong>Possible details — review before using</strong>{candidates.map((c,i)=><div key={`${c.field}-${c.value}-${i}`}><span>{c.field}: {c.value}</span><button className="account-button" onClick={()=>accept(c)}>Use</button><button className="text-button" onClick={()=>setCandidates(old=>old.filter(x=>x!==c))}>Reject</button></div>)}</section>}<details className="photo-ocr-text"><summary>View recognized text and confidence</summary>{Object.entries(results).map(([key,value])=><section key={key}><strong>{key.replace('-',' ')} · {Math.round(value.confidence)}%{value.enhanced?' enhanced':''}</strong><pre>{value.text||'No text read.'}</pre><button className="account-button" onClick={()=>navigator.clipboard?.writeText(value.text)}>Copy text</button></section>)}</details>{!Object.values(results).some(x=>x.text.trim())&&<p className="form-message">No usable text was found. Adjust the crop, improve lighting, or enter details manually.</p>}<button className="primary wide" onClick={()=>{if(grader)onManualDetails(grader,{...fields,certNumber:fields.certNumber.trim()})}}>Continue to card details</button><button className="text-button" onClick={()=>setPhase('review')}>Adjust crops and retry OCR</button><button className="text-button" onClick={onCancel}>Cancel</button></div>;
 }
