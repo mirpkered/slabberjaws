@@ -30,6 +30,7 @@ import { createManualCard } from "../lookup/manual";
 import { ScanEntry } from "../scanner/ScanEntry";
 import { PhotoEntry } from "../photo/PhotoEntry";
 import type { PhotoFields } from "../photo/extract";
+import { certificationLinkLabel, generalVerificationUrl, graders } from "../graders/registry";
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
@@ -89,7 +90,6 @@ const seed: Card[] = [
     addedAt: "2026-09-12",
   },
 ];
-const graders: Grader[] = ["Degree", "PSA", "CGC", "PGS", "Collect Direct", "GMA", "Integrity Grading"];
 
 function CardImage({ card, large = false }: { card: Card; large?: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -266,7 +266,7 @@ export default function Home() {
           const value = input as { grader?: Grader; certNumber?: string };
           if (
             !value.certNumber?.trim() ||
-            !graders.includes(value.grader as Grader)
+            !graders.includes(value.grader as (typeof graders)[number])
           )
             throw new Error(
               "A supported grader and certification number are required.",
@@ -342,7 +342,7 @@ export default function Home() {
     if (step === "scan" || step === "photos") setStep("lookup");
   }
   function beginManual() {
-    setDraft(createManualCard(lookupGrader, cert));
+    setDraft({...createManualCard(lookupGrader, cert),certUrl:generalVerificationUrl(lookupGrader)});
     setStep("manual");
   }
   function update(key: keyof Card, value: string) {
@@ -739,10 +739,10 @@ export default function Home() {
                   if (selected) setLookupGrader(selected);
                   setStep("lookup");
                 }}
-                onManualDetails={(selected, value) => {
+                onManualDetails={(selected, value, extra) => {
                   setLookupGrader(selected);
                   setCert(value);
-                  setDraft(createManualCard(selected, value));
+                  setDraft({...createManualCard(selected, value), ...(extra?.certUrl?{certUrl:extra.certUrl}:{}), ...(extra?.grade?{grade:extra.grade}:{})});
                   setStep("manual");
                 }}
                 onConfirm={(selected, value) => {
@@ -760,6 +760,7 @@ export default function Home() {
                   setCert(fields.certNumber);
                   setDraft({
                     ...createManualCard(selected, fields.certNumber),
+                    ...(generalVerificationUrl(selected)?{certUrl:generalVerificationUrl(selected)}:{}),
                     ...fields,
                     grader: selected,
                     certNumber: fields.certNumber,
@@ -963,7 +964,7 @@ export default function Home() {
                   rel="noreferrer"
                   href={detail.certUrl}
                 >
-                  Open certification <ExternalLink />
+                  {certificationLinkLabel(detail.grader)} <ExternalLink />
                 </a>
               )}
             </div>
