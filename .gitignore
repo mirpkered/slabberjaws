@@ -48,3 +48,8 @@ next-env.d.ts
 /.codex/
 /outputs/
 /work/
+# Supabase CLI caches connection metadata locally. The project-link files already
+# tracked above remain available; do not add generated connection/cache files.
+/supabase/.temp/*
+!/supabase/.temp/cli-latest
+!/supabase/.temp/linked-project.json
