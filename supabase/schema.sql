@@ -3,7 +3,7 @@ create extension if not exists pgcrypto;
 create table if not exists public.cards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  grader text not null check (grader in ('Degree', 'PSA', 'CGC', 'PGS', 'Collect Direct')),
+  grader text not null check (grader in ('Degree', 'PSA', 'CGC', 'PGS', 'Collect Direct', 'GMA', 'Integrity Grading', 'CSG', 'C3G', 'SGC', 'GAS')),
   cert_number text not null check (length(trim(cert_number)) > 0),
   grade text not null default '',
   year text not null default '',
