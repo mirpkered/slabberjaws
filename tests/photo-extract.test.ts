@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyPhotoFields, extractPhotoFields, fieldsFromConfidentRegions, mergeOcrFields } from "../photo/extract.ts";
-import { containedImageRect, fullCrop, moveCropByDisplayDelta, resizeCropByDisplayDelta, sourceCrop, validCrop } from "../photo/crop.ts";
+import { containedImageRect, fullCrop, moveCropByDisplayDelta, resizeCropByDisplayDelta, resizeCropFromCorner, sourceCrop, validCrop } from "../photo/crop.ts";
 
 test("photo OCR extraction preserves an explicitly labelled leading-zero cert", () => {
   const result = extractPhotoFields("CERTIFICATION NUMBER: 00409451\nGRADE: 9.5\nBRAND: Topps\nSET: Chrome");
@@ -42,6 +42,18 @@ test("crop interaction maps display pixels through contained portrait and landsc
   assert.deepEqual(moveCropByDisplayDelta({x:20,y:20,width:50,height:50},30,40,portrait),{x:30,y:30,width:50,height:50});
   assert.deepEqual(resizeCropByDisplayDelta({x:20,y:20,width:50,height:50},60,90,portrait),{x:20,y:20,width:70,height:72.5});
   assert.deepEqual(moveCropByDisplayDelta({x:80,y:80,width:20,height:20},100,100,landscape),{x:80,y:80,width:20,height:20});
+});
+test("each crop corner resizes intuitively while anchoring its opposite corner",()=>{
+  const crop={x:20,y:20,width:40,height:40},box={width:400,height:400};
+  assert.deepEqual(resizeCropFromCorner(crop,40,40,box,"top-left"),{x:30,y:30,width:30,height:30});
+  assert.deepEqual(resizeCropFromCorner(crop,40,40,box,"top-right"),{x:20,y:30,width:50,height:30});
+  assert.deepEqual(resizeCropFromCorner(crop,40,40,box,"bottom-left"),{x:30,y:20,width:30,height:50});
+  assert.deepEqual(resizeCropFromCorner(crop,40,40,box,"bottom-right"),{x:20,y:20,width:50,height:50});
+});
+test("corner resizing clamps at source-image edges and minimum dimensions",()=>{
+  assert.deepEqual(resizeCropFromCorner({x:0,y:0,width:12,height:12},-100,-100,{width:100,height:100},"top-left"),{x:0,y:0,width:12,height:12});
+  assert.deepEqual(resizeCropFromCorner({x:20,y:20,width:40,height:40},1000,1000,{width:100,height:100},"bottom-right"),{x:20,y:20,width:80,height:80});
+  assert.deepEqual(resizeCropFromCorner({x:20,y:20,width:40,height:40},1000,1000,{width:100,height:100},"top-left"),{x:52,y:52,width:8,height:8});
 });
 test("unlabelled slab text becomes review candidates, not silently committed",()=>{
   const result=extractPhotoFields("1999 POKEMON GAME\nCHARIZARD\nHOLO\nGRADE 8");

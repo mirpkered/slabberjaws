@@ -395,6 +395,7 @@ export default function Home() {
     setStep("manual");
   }
   function update(key: keyof Card, value: string) {
+    if (key === "certNumber") setCert(value);
     setDraft((d) => (d ? { ...d, [key]: value } : d));
   }
   async function save() {
@@ -913,9 +914,14 @@ export default function Home() {
             )}
             {step === "manual" && draft && (
               <>
+                <div className="identity">
+                  <span>{draft.grader}</span>
+                  <code>{draft.certNumber}</code>
+                </div>
                 <div className="manual-grid">
                   {(
                     [
+                      ["certNumber", "Certification number"],
                       ["subject", "Subject / card name"],
                       ["grade", "Grade"],
                       ["year", "Year"],
@@ -939,10 +945,6 @@ export default function Home() {
                       />
                     </label>
                   ))}
-                </div>
-                <div className="identity">
-                  <span>{draft.grader}</span>
-                  <code>{draft.certNumber}</code>
                 </div>
                 <button className="primary wide" onClick={save}>
                   Add to collection

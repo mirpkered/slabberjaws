@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { containedImageRect, moveCropByDisplayDelta, resizeCropByDisplayDelta, type Crop } from "./crop";
+import { containedImageRect, moveCropByDisplayDelta, resizeCropFromCorner, type Crop, type CropCorner } from "./crop";
 
 type Props = { src: string; alt: string; crop: Crop; onChange(crop: Crop): void };
 type Size = { width: number; height: number };
-type Drag = { pointerId: number; x: number; y: number; crop: Crop; mode: "move" | "resize" };
+type Drag = { pointerId: number; x: number; y: number; crop: Crop; mode: "move" | "resize"; corner?: CropCorner };
 
 /** Touch-safe crop editor. Crop percentages are relative to the visible, object-fit:contain image, not its letterboxed stage. */
 export function CropEditor({ src, alt, crop, onChange }: Props) {
@@ -29,11 +29,13 @@ export function CropEditor({ src, alt, crop, onChange }: Props) {
   }, []);
 
   const imageRect = containedImageRect(imageSize.width, imageSize.height, stageSize.width, stageSize.height);
-  function pointerDown(event: ReactPointerEvent<HTMLElement>, mode: Drag["mode"]) {
+  function pointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
-    event.stopPropagation();
-    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* Synthetic pointer tests and older WebKit can omit active-pointer capture. */ }
-    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, crop, mode };
+    const target=event.target instanceof HTMLElement?event.target:event.currentTarget;
+    const handle=target.closest<HTMLElement>("[data-crop-resize]");
+    const corner=(['top-left','top-right','bottom-left','bottom-right'] as CropCorner[]).find(value=>value===handle?.dataset.cropResize);
+    try { target.setPointerCapture(event.pointerId); } catch { /* Older WebKit may not expose capture for synthetic pointer events. */ }
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, crop, mode:handle?"resize":"move", ...(corner?{corner}:{}) };
   }
   function pointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const active = drag.current;
@@ -42,24 +44,24 @@ export function CropEditor({ src, alt, crop, onChange }: Props) {
     const dx = event.clientX - active.x, dy = event.clientY - active.y;
     onChange(active.mode === "move"
       ? moveCropByDisplayDelta(active.crop, dx, dy, imageRect)
-      : resizeCropByDisplayDelta(active.crop, dx, dy, imageRect));
+      : resizeCropFromCorner(active.crop, dx, dy, imageRect, active.corner ?? "bottom-right"));
   }
   function pointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
     if (drag.current?.pointerId === event.pointerId) drag.current = null;
   }
-  function keyboardResize(event: KeyboardEvent<HTMLButtonElement>) {
+  function keyboardResize(event: KeyboardEvent<HTMLButtonElement>, corner: CropCorner) {
     const deltas: Record<string, [number, number]> = { ArrowRight: [3, 0], ArrowLeft: [-3, 0], ArrowDown: [0, 3], ArrowUp: [0, -3] };
     const delta = deltas[event.key];
     if (!delta) return;
     event.preventDefault();
-    onChange(resizeCropByDisplayDelta(crop, delta[0] * imageRect.width / 100, delta[1] * imageRect.height / 100, imageRect));
+    onChange(resizeCropFromCorner(crop, delta[0] * imageRect.width / 100, delta[1] * imageRect.height / 100, imageRect, corner));
   }
 
   return <div className="crop-stage" ref={stage} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
     <div className="crop-image-frame" style={{ width: imageRect.width, height: imageRect.height, left: imageRect.x, top: imageRect.y }}>
       <img src={src} alt={alt} draggable={false} onLoad={event => setImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
-      <div className="crop-box" data-crop-move="true" role="group" aria-label="Crop region; drag to move" style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.width}%`, height: `${crop.height}%` }} onPointerDown={event=>pointerDown(event,"move")}>
-        <button className="crop-handle" data-crop-resize="true" type="button" aria-label="Resize crop region" onPointerDown={event=>pointerDown(event,"resize")} onKeyDown={keyboardResize} />
+      <div className="crop-box" data-crop-move="true" role="group" aria-label="Crop region; drag inside to move" style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.width}%`, height: `${crop.height}%` }} onPointerDown={pointerDown}>
+        {(["top-left","top-right","bottom-left","bottom-right"] as CropCorner[]).map(corner=><button key={corner} className={`crop-handle crop-handle-${corner}`} data-crop-resize={corner} type="button" aria-label={`Resize crop ${corner}`} onKeyDown={event=>keyboardResize(event,corner)} />)}
       </div>
     </div>
   </div>;

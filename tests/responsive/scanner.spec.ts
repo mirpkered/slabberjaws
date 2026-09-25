@@ -75,7 +75,8 @@ test('CSG Code 128 cert is held as a candidate until CSG is explicitly selected,
   await expect(page.getByLabel('Decoded certification number')).toHaveValue('');
   await page.getByLabel('Grading company').selectOption('PSA');await expect(page.getByLabel('Decoded certification number')).toHaveValue('');
   await page.getByLabel('Grading company').selectOption('CSG');await expect(page.getByLabel('Decoded certification number')).toHaveValue('1012833027');
-  await page.getByRole('button',{name:'Continue to card details'}).click();await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.identity')).toContainText('1012833027');expect(lookupCount).toBe(0);
+  await page.getByRole('button',{name:'Continue to card details'}).click();await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.identity')).toContainText('1012833027');await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');expect(lookupCount).toBe(0);
+  await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await expect(page.getByLabel('Certification number')).toHaveValue('');await expect(page.getByLabel('Grading company')).toHaveValue('Degree');
 });
 test('CSG and C3G QR URLs reach card details intact without any lookup request',async({page})=>{
   await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;
@@ -84,12 +85,20 @@ test('CSG and C3G QR URLs reach card details intact without any lookup request',
   await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,csg);
   await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.getByLabel('Editable grade candidate')).toHaveValue('8.5');
   await page.getByLabel('Grading company').selectOption('CSG');await page.getByRole('button',{name:'Continue to card details'}).click();
-  await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+  await expect(page.locator('.identity')).toContainText('CSG');await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
   await page.locator('.add-modal .close').click();
   const c3g='https://www.c3-grading.com/Reports-1008/4301/10084351';
   await state(page,'');await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,c3g);
   await expect(page.getByLabel('Certification number')).toHaveValue('10084351');await expect(page.getByLabel('Editable grade candidate')).toHaveCount(0);
   await page.getByLabel('Grading company').selectOption('C3G');await page.getByRole('button',{name:'Continue to card details'}).click();
-  await expect(page.locator('.identity')).toContainText('C3G');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('');await expect(page.getByLabel('Certification page URL')).toHaveValue(c3g);
+  await expect(page.locator('.identity')).toContainText('C3G');await expect(page.getByLabel('Certification number')).toHaveValue('10084351');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('');await expect(page.getByLabel('Certification page URL')).toHaveValue(c3g);
   expect(lookupCount).toBe(0);
+  await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await expect(page.getByLabel('Certification number')).toHaveValue('');await expect(page.getByLabel('Grading company')).toHaveValue('Degree');
+});
+
+test('Degree scan keeps its supported cert lookup route and leading zeroes',async({page})=>{
+  await cameraMock(page);let requestUrl='';await page.route('**/api/lookup/**',async route=>{requestUrl=route.request().url();return route.fulfill({json:{ok:true,card:{id:'fixture',grader:'Degree',certNumber:'00409451',grade:'9',year:'1993',brand:'Topps',set:'Series One',subject:'Joe Oliver',cardNumber:'#14',variant:'',frontImageUrl:'',backImageUrl:'',certUrl:'https://degreegrading.com/certification/00409451/',population:null,graderSpecific:{},addedAt:'2026-09-25'}}});});
+  await page.goto('./',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab'}).click();await state(page,'https://degreegrading.com/certification/00409451/');
+  await page.getByLabel('Grading company').selectOption('Degree');await expect(page.getByLabel('Decoded certification number')).toHaveValue('00409451');await page.getByRole('button',{name:'Look up certification'}).click();
+  await expect(page.locator('.lookup-preview')).toBeVisible();await expect(page.locator('.lookup-preview code')).toHaveText('00409451');expect(requestUrl).toContain('Degree/00409451');
 });

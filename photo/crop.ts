@@ -16,8 +16,15 @@ export function moveCropByDisplayDelta(crop:Crop,dx:number,dy:number,imageRect:{
   return validCrop({...crop,x:crop.x+dx/imageRect.width*100,y:crop.y+dy/imageRect.height*100});
 }
 
-/** Resize from the lower-right corner, preserving the crop origin and clamping within image bounds. */
-export function resizeCropByDisplayDelta(crop:Crop,dx:number,dy:number,imageRect:{width:number;height:number}){
+export type CropCorner="top-left"|"top-right"|"bottom-left"|"bottom-right";
+
+/** Resize from any corner, keeping the opposite corner anchored and enforcing bounds/minimum dimensions. */
+export function resizeCropFromCorner(crop:Crop,dx:number,dy:number,imageRect:{width:number;height:number},corner:CropCorner){
   if(imageRect.width<=0||imageRect.height<=0)return validCrop(crop);
-  return validCrop({...crop,width:crop.width+dx/imageRect.width*100,height:crop.height+dy/imageRect.height*100});
+  const c=validCrop(crop),mx=dx/imageRect.width*100,my=dy/imageRect.height*100;
+  let left=c.x,right=c.x+c.width,top=c.y,bottom=c.y+c.height;
+  if(corner.includes("left"))left=Math.max(0,Math.min(right-8,left+mx));else right=Math.min(100,Math.max(left+8,right+mx));
+  if(corner.startsWith("top"))top=Math.max(0,Math.min(bottom-8,top+my));else bottom=Math.min(100,Math.max(top+8,bottom+my));
+  return {x:left,y:top,width:right-left,height:bottom-top};
 }
+export const resizeCropByDisplayDelta=(crop:Crop,dx:number,dy:number,imageRect:{width:number;height:number})=>resizeCropFromCorner(crop,dx,dy,imageRect,"bottom-right");
