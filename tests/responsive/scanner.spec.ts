@@ -97,8 +97,11 @@ test('CSG and C3G QR URLs reach card details intact without any lookup request',
 });
 
 test('Degree scan keeps its supported cert lookup route and leading zeroes',async({page})=>{
-  await cameraMock(page);let requestUrl='';await page.route('**/api/lookup/**',async route=>{requestUrl=route.request().url();return route.fulfill({json:{ok:true,card:{id:'fixture',grader:'Degree',certNumber:'00409451',grade:'9',year:'1993',brand:'Topps',set:'Series One',subject:'Joe Oliver',cardNumber:'#14',variant:'',frontImageUrl:'',backImageUrl:'',certUrl:'https://degreegrading.com/certification/00409451/',population:null,graderSpecific:{},addedAt:'2026-09-25'}}});});
+  await cameraMock(page);let requestUrl='';let requestBody='';const response={ok:true,card:{id:'fixture',grader:'Degree',certNumber:'00409451',grade:'9',year:'1993',brand:'Topps',set:'Series One',subject:'Joe Oliver',cardNumber:'#14',variant:'',frontImageUrl:'',backImageUrl:'',certUrl:'https://degreegrading.com/certification/00409451/',population:null,graderSpecific:{},addedAt:'2026-09-25'}};
+  await page.route('**/api/lookup/**',async route=>{requestUrl=route.request().url();return route.fulfill({json:response});});
+  await page.route('**/functions/v1/lookup',async route=>{requestUrl=route.request().url();requestBody=route.request().postData()??'';return route.fulfill({json:response});});
   await page.goto('./',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab'}).click();await state(page,'https://degreegrading.com/certification/00409451/');
   await page.getByLabel('Grading company').selectOption('Degree');await expect(page.getByLabel('Decoded certification number')).toHaveValue('00409451');await page.getByRole('button',{name:'Look up certification'}).click();
-  await expect(page.locator('.lookup-preview')).toBeVisible();await expect(page.locator('.lookup-preview code')).toHaveText('00409451');expect(requestUrl).toContain('Degree/00409451');
+  await expect(page.locator('.lookup-preview')).toBeVisible();await expect(page.locator('.lookup-preview code')).toHaveText('00409451');
+  if(requestBody){expect(JSON.parse(requestBody)).toMatchObject({grader:'degree',certNumber:'00409451'});}else{expect(requestUrl).toContain('Degree/00409451');}
 });
