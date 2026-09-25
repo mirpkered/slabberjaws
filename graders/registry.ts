@@ -6,5 +6,8 @@ export const graderRegistry:ReadonlyArray<{id:SupportedGrader;label:string;fullN
  {id:'SGC',label:'SGC',generalVerificationUrl:'https://www.gosgc.com/cert-code-lookup'}, {id:'GAS',label:'GAS',fullName:'Global Authentication Services',generalVerificationUrl:'https://gasgrading.com'},
 ];
 export const graders=graderRegistry.map(x=>x.id) as SupportedGrader[];
+// Only graders with an implemented lookup adapter should invoke certificate lookup.
+export const lookupEnabledGraders:ReadonlySet<SupportedGrader>=new Set(['Degree','PSA','CGC']);
+export const hasAutomaticLookup=(grader:string)=>lookupEnabledGraders.has(grader as SupportedGrader);
 export function generalVerificationUrl(grader:string){return graderRegistry.find(x=>x.id===grader)?.generalVerificationUrl??'';}
 export function certificationLinkLabel(grader:string){return grader==='SGC'?'Open Certification Lookup':grader==='GAS'?'Visit Grader Website':grader==='CSG'||grader==='C3G'?'View Certification':'Open certification';}

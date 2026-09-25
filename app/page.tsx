@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive,
@@ -10,6 +10,7 @@ import {
   ImageOff,
   LogIn,
   LogOut,
+  Menu,
   Plus,
   Search,
   SlidersHorizontal,
@@ -30,7 +31,7 @@ import { createManualCard } from "../lookup/manual";
 import { ScanEntry } from "../scanner/ScanEntry";
 import { PhotoEntry } from "../photo/PhotoEntry";
 import type { PhotoFields } from "../photo/extract";
-import { certificationLinkLabel, generalVerificationUrl, graders } from "../graders/registry";
+import { certificationLinkLabel, generalVerificationUrl, graders, hasAutomaticLookup } from "../graders/registry";
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
@@ -120,6 +121,7 @@ export default function Home() {
     [grade, setGrade] = useState("All grades"),
     [sort, setSort] = useState("Newest"),
     [addOpen, setAddOpen] = useState(false),
+    [addSessionId, setAddSessionId] = useState(0),
     [detail, setDetail] = useState<Card | null>(null),
     [step, setStep] = useState<
       "lookup" | "failed" | "manual" | "preview" | "scan" | "photos"
@@ -145,6 +147,9 @@ export default function Home() {
     } | null>(null),
     [importResult, setImportResult] = useState<ImportResult | null>(null),
     [importBusy, setImportBusy] = useState(false);
+  const lookupGeneration = useRef(0);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const filtered = useMemo(
     () =>
       cards
@@ -234,6 +239,38 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountMenuOpen(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!accountMenuRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [accountMenuOpen]);
+
+  function resetAddSession() {
+    lookupGeneration.current += 1;
+    setLooking(false);
+    setStep("lookup");
+    setLookupGrader("Degree");
+    setCert("");
+    setDraft(null);
+    setLookupMessage("");
+    setNotice("");
+  }
+  function openAddCard() {
+    resetAddSession();
+    setAddSessionId((id) => id + 1);
+    setAddOpen(true);
+  }
+
+  useEffect(() => {
     const context = (
       document as Document & {
         modelContext?: {
@@ -271,9 +308,11 @@ export default function Home() {
             throw new Error(
               "A supported grader and certification number are required.",
             );
+          resetAddSession();
           setLookupGrader(value.grader as Grader);
           setCert(value.certNumber.trim());
           setStep("lookup");
+          setAddSessionId((id) => id + 1);
           setAddOpen(true);
           return {
             status: "ready",
@@ -288,6 +327,7 @@ export default function Home() {
   }, []);
 
   async function beginLookup(input?: { grader: Grader; certNumber: string }) {
+    const generation = ++lookupGeneration.current;
     const requestedGrader = input?.grader ?? lookupGrader;
     const requestedCert = input?.certNumber ?? cert;
     if (input) {
@@ -306,6 +346,7 @@ export default function Home() {
     }
     try {
       if (await repository.hasCard(requestedGrader, requestedCert)) {
+        if (generation !== lookupGeneration.current) return;
         const duplicate = cards.find(
           (c) =>
             c.grader === requestedGrader &&
@@ -318,9 +359,16 @@ export default function Home() {
         return;
       }
     } catch (error) {
+      if (generation !== lookupGeneration.current) return;
       setNotice(
         `Collection unavailable: ${error instanceof Error ? error.message : "Please try again."}`,
       );
+      return;
+    }
+    if (generation !== lookupGeneration.current) return;
+    if (!hasAutomaticLookup(requestedGrader)) {
+      setDraft({ ...createManualCard(requestedGrader, requestedCert.trim()), certUrl: generalVerificationUrl(requestedGrader) });
+      setStep("manual");
       return;
     }
     setLooking(true);
@@ -328,6 +376,7 @@ export default function Home() {
       requestedGrader,
       requestedCert.trim(),
     );
+    if (generation !== lookupGeneration.current) return;
     if (result.ok) {
       setDraft(result.card);
       setStep("preview");
@@ -335,11 +384,11 @@ export default function Home() {
       setLookupMessage(result.message);
       setStep("failed");
     }
-    setLooking(false);
+    if (generation === lookupGeneration.current) setLooking(false);
   }
   function closeAdd() {
     setAddOpen(false);
-    if (step === "scan" || step === "photos") setStep("lookup");
+    resetAddSession();
   }
   function beginManual() {
     setDraft({...createManualCard(lookupGrader, cert),certUrl:generalVerificationUrl(lookupGrader)});
@@ -361,8 +410,7 @@ export default function Home() {
       await repository.addCard(draft);
       setCards(await repository.getCards());
       setAddOpen(false);
-      setStep("lookup");
-      setCert("");
+      resetAddSession();
       setNotice("Card added to your collection.");
     } catch (error) {
       setNotice(
@@ -476,30 +524,20 @@ export default function Home() {
           </div>
         </div>
         <div className="header-actions">
-          {session ? (
-            <>
-              <span className="account-email">
-                <UserRound />
-                {session.user.email}
-              </span>
-              <button className="account-button" onClick={signOut}>
-                <LogOut /> Sign out
-              </button>
-            </>
-          ) : (
-            <button
-              className="account-button"
-              onClick={() => setAuthOpen(true)}
-            >
-              <LogIn /> Account
-            </button>
-          )}
           <button
             className="primary desktop-add"
-            onClick={() => setAddOpen(true)}
+            onClick={openAddCard}
           >
             <Plus /> Add card
           </button>
+          <div className="account-menu" ref={accountMenuRef}>
+            <button className="account-menu-toggle" aria-label={accountMenuOpen ? "Close account menu" : "Open account menu"} aria-haspopup="true" aria-expanded={accountMenuOpen} aria-controls="account-menu-panel" onClick={() => setAccountMenuOpen((open) => !open)}>
+              <Menu aria-hidden="true" />
+            </button>
+            {accountMenuOpen && <div className="account-menu-panel" id="account-menu-panel" aria-label="Account actions">
+              {session ? <><p className="account-menu-identity"><UserRound aria-hidden="true" />{session.user.email}</p><button className="account-button" onClick={() => { setAccountMenuOpen(false); void signOut(); }}><LogOut aria-hidden="true" /> Sign out</button></> : <button className="account-button" onClick={() => { setAccountMenuOpen(false); setAuthOpen(true); }}><LogIn aria-hidden="true" /> Account</button>}
+            </div>}
+          </div>
         </div>
       </header>
       <section className="shell">
@@ -652,7 +690,7 @@ export default function Home() {
             </div>
           ))}
       </section>
-      <button className="floating-add" onClick={() => setAddOpen(true)}>
+      <button className="floating-add" onClick={openAddCard}>
         <Plus /> Add card
       </button>
       {authOpen && (
@@ -714,7 +752,7 @@ export default function Home() {
             if (e.target === e.currentTarget) closeAdd();
           }}
         >
-          <section className="modal add-modal">
+          <section className="modal add-modal" key={addSessionId}>
             <button className="close" onClick={closeAdd}>
               <X />
             </button>
@@ -819,10 +857,10 @@ export default function Home() {
                 </label>
                 <button
                   className="primary wide"
-                  disabled={looking}
+                  disabled={looking || !cert.trim()}
                   onClick={() => void beginLookup()}
                 >
-                  {looking ? "Looking up…" : "Look up certificate"}
+                  {looking ? "Looking up…" : hasAutomaticLookup(lookupGrader) ? "Look up certificate" : "Continue to card details"}
                 </button>
               </>
             )}

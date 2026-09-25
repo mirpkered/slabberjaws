@@ -8,7 +8,8 @@ for (const [width, height] of [[320,568],[375,667],[390,844],[430,932],[768,1024
   test(`account form is usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto('./', { waitUntil: 'networkidle' });
-    await page.getByRole('button', { name: 'Account' }).click();
+    await page.getByRole('button', { name: 'Open account menu' }).click();
+    await page.getByRole('button', { name: 'Account', exact: true }).click();
     await expect(page.locator('.auth-form')).toBeVisible();
     await expect(page.locator('input[name="email"]')).toHaveAttribute('autocomplete', 'username');
     await expect(page.locator('input[name="password"]')).toHaveAttribute('autocomplete', 'current-password');

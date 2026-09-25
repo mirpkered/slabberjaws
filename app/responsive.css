@@ -35,6 +35,13 @@
 .shell {
   width: 100%;
 }
+.account-menu { position: relative; }
+.account-menu-toggle { min-width: 44px; min-height: 44px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+.account-menu-toggle:focus-visible { outline: 3px solid var(--accent-highlight); outline-offset: 2px; }
+.account-menu-panel { position: absolute; z-index: 80; top: calc(100% + 8px); right: 0; width: min(300px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 16px 40px #0009; }
+.account-menu-panel .account-button { width: 100%; min-height: 48px; justify-content: flex-start; padding: 12px; font-size: .85rem; }
+.account-menu-identity { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 4px; overflow-wrap: anywhere; font-size: .875rem; }
+.account-menu-identity svg { flex: 0 0 18px; }
 .primary,
 .text-button,
 .account-button {
@@ -176,14 +183,24 @@
   }
   .header-actions {
     width: 100%;
-    gap: 12px;
+    gap: 10px;
+    align-items: stretch;
   }
   .desktop-add {
     display: inline-flex;
     font-size: 0.85rem;
     padding: 10px 12px;
     min-height: 44px;
+    flex: 1 1 auto;
+    justify-content: center;
   }
+  .account-menu { position: relative; flex: 0 0 48px; }
+  .account-menu-toggle { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }
+  .account-menu-toggle svg { width: 22px; height: 22px; }
+  .account-menu-panel { position: absolute; z-index: 80; top: calc(100% + 8px); right: 0; width: min(280px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 16px 40px #0009; }
+  .account-menu-panel .account-button { width: 100%; min-height: 48px; justify-content: flex-start; padding: 12px; font-size: .85rem; white-space: normal; }
+  .account-menu-identity { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 4px; overflow-wrap: anywhere; font-size: .875rem; }
+  .account-menu-identity svg { flex: 0 0 18px; }
   .account-button {
     font-size: 0.85rem;
     padding: 10px 14px;
@@ -193,6 +210,7 @@
     width: 100%;
     font-size: 0.875rem;
   }
+  .account-menu-panel .account-button { font-size: .85rem; }
   .shell {
     padding: 28px max(16px, env(safe-area-inset-right))
       calc(110px + env(safe-area-inset-bottom))

@@ -9,7 +9,7 @@ export function cameraError(error: unknown): string {
 }
 export type ZoomCapability = { min: number; max: number; step: number; current: number };
 export type CameraDiagnostics = { decoder: NonNullable<Decoder['kind']>; formats: string[]; width: number; height: number; label: string; torch: boolean; zoom?: ZoomCapability; focusModes: string[]; focusMode?: string; pointsOfInterest: boolean };
-type Options = { video: HTMLVideoElement; onRead(raw: string): void; onError(message: string): void; onReady(torch: boolean, diagnostics: CameraDiagnostics): void };
+type Options = { video: HTMLVideoElement; onRead(raw: string, format?:string): void; onError(message: string): void; onReady(torch: boolean, diagnostics: CameraDiagnostics): void };
 export type CameraDependencies = {
   secure: boolean;
   getMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
@@ -42,9 +42,10 @@ export function startCamera(options: Options, dependencies: CameraDependencies =
     if (stopped) return;
     try {
       if (options.video.readyState >= 2 && options.video.videoWidth > 0) {
-        const raw = await decoder?.decode(options.video);
+        const detailed = decoder?.decodeDetailed ? await decoder.decodeDetailed(options.video) : undefined;
+        const raw = decoder?.decodeDetailed ? detailed?.raw : await decoder?.decode(options.video);
         if (stopped) return;
-        if (raw?.trim()) { stop(); options.onRead(raw); return; }
+        if (raw?.trim()) { stop(); options.onRead(raw,detailed?.format); return; }
       }
       timer = setTimeout(tick, 180);
     } catch (error) { fail(cameraError(error)); }
@@ -92,7 +93,7 @@ export function startCamera(options: Options, dependencies: CameraDependencies =
     try { await track.applyConstraints({advanced:[{pointsOfInterest:[{x,y}]} as unknown as MediaTrackConstraintSet]}); return true; } catch { return false; }
   }, async scanStill(region?: {x:number;y:number;width:number;height:number}) {
     if (stopped || !decoder || options.video.readyState < 2 || !options.video.videoWidth) return {raw:undefined, failure:'Video frame unavailable'};
-    try { const raw = await (decoder.decodeStill?.(options.video,region) ?? decoder.decode(options.video)); if(raw?.trim()) { stop(); options.onRead(raw); return {raw}; } return {raw:undefined,failure:decoder.lastFailure ?? 'No code found'}; }
+    try { const detailed=decoder.decodeStillDetailed?await decoder.decodeStillDetailed(options.video,region):undefined;const raw=decoder.decodeStillDetailed?detailed?.raw:await (decoder.decodeStill?.(options.video,region)??decoder.decode(options.video));if(raw?.trim()) { stop(); options.onRead(raw,detailed?.format); return {raw}; } return {raw:undefined,failure:decoder.lastFailure ?? 'No code found'}; }
     catch (error) { return {raw:undefined,failure:error instanceof Error ? error.name : 'Still-frame decode failed'}; }
   }};
 }

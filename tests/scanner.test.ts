@@ -27,6 +27,12 @@ test('first decoded result stops camera and prevents duplicate callbacks',async(
   assert.deepEqual(f.payloads,['00409451']);assert.deepEqual(f.counts(),{stops:1,disposed:1,reads:1});
   assert.equal(f.options.video.srcObject,null);camera.stop();assert.equal(f.counts().stops,1);
 });
+test('scanner forwards the decoder format with its text so barcode-specific handoffs can be scoped safely',async()=>{
+  const f=fixture(),read:unknown[]=[];const options={...f.options,onRead:(raw:string,format?:string)=>read.push({raw,format})};
+  const camera=startCamera(options,{...f.dependencies,decoder:async()=>({decode:async()=>{throw new Error('legacy decoder should not run');},decodeDetailed:async()=>({raw:'001012833027',format:'code_128'}),dispose(){}})});
+  await camera.ready;await new Promise(resolve=>setTimeout(resolve,220));
+  assert.deepEqual(read,[{raw:'001012833027',format:'code_128'}]);assert.equal(f.options.video.srcObject,null);
+});
 test('cancel while permission is pending releases the eventual stream',async()=>{
   const f=fixture();let release!:(stream:MediaStream)=>void;
   const camera=startCamera(f.options,{...f.dependencies,getMedia:()=>new Promise(resolve=>{release=resolve;})});

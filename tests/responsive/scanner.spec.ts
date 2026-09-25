@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 async function cameraMock(page: Page) {
   await page.addInitScript(() => {
-    const state={raw:'',denied:false,stops:0,requests:0,torch:false};
+    const state={raw:'',format:'qr_code',denied:false,stops:0,requests:0,torch:false};
     Object.assign(window,{scanTest:state});
     Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{
       state.requests++;if(state.denied)throw new DOMException('denied','NotAllowedError');
@@ -16,11 +16,11 @@ async function cameraMock(page: Page) {
     HTMLMediaElement.prototype.play=async()=>{};HTMLMediaElement.prototype.pause=()=>{};
     Object.assign(window,{BarcodeDetector:class {
       static async getSupportedFormats(){return ['code_128','code_39','ean_13','ean_8','upc_a','upc_e','qr_code'];}
-      async detect(){return state.raw?[{rawValue:state.raw}]:[];}
+      async detect(){return state.raw?[{rawValue:state.raw,format:state.format}]:[];}
     }});
   });
 }
-async function state(page:Page,raw:string) {await page.evaluate(value=>{(window as unknown as {scanTest:{raw:string}}).scanTest.raw=value;},raw);}
+async function state(page:Page,raw:string,format='qr_code') {await page.evaluate(value=>{const target=(window as unknown as {scanTest:{raw:string;format:string}}).scanTest;target.raw=value.raw;target.format=value.format;},{raw,format});}
 async function fits(page:Page){expect(await page.evaluate(()=>({document:document.documentElement.scrollWidth<=innerWidth,elements:[...document.querySelectorAll('.add-modal, .add-modal *')].every(el=>{const r=el.getBoundingClientRect();return !r.width || (r.left>=0&&r.right<=innerWidth+1);})}))).toEqual({document:true,elements:true});}
 for(const [width,height] of [[320,568],[375,667],[390,844],[430,932],[768,1024],[1024,768],[1440,900]]){
   test(`scanner ${width}px confirmation and unavailable lookup`,async({page},info)=>{
@@ -35,7 +35,7 @@ for(const [width,height] of [[320,568],[375,667],[390,844],[430,932],[768,1024],
     await page.getByRole('button',{name:'Turn flashlight on'}).click();
     await state(page,'https://example.com/cert/00409451');
     await expect(page.getByRole('heading',{name:'Which grading company is this?'})).toBeVisible();await fits(page);
-    await expect(page.getByRole('button',{name:'Look up certification',exact:true})).toBeDisabled();
+    await expect(page.getByRole('button',{name:'Continue to card details',exact:true})).toBeDisabled();
     expect(requests).toHaveLength(0);
     await expect(page.getByLabel('Decoded certification number')).toHaveValue('00409451');
     await expect(page.locator('.scan-entry video')).toHaveCount(0);
@@ -67,4 +67,29 @@ test('scanner cancel, rescan, unsupported text, permission denial and close rele
   await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();
   // Closing discards the entire scan component, including raw payload/confirmation.
   await expect(page.getByLabel('Decoded certification number')).toHaveCount(0);
+});
+test('CSG Code 128 cert is held as a candidate until CSG is explicitly selected, then skips unsupported lookup',async({page})=>{
+  await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;
+  await page.route('**/functions/v1/lookup',route=>{lookupCount++;return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'not expected'}});});
+  await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,'1012833027','code_128');
+  await expect(page.getByLabel('Decoded certification number')).toHaveValue('');
+  await page.getByLabel('Grading company').selectOption('PSA');await expect(page.getByLabel('Decoded certification number')).toHaveValue('');
+  await page.getByLabel('Grading company').selectOption('CSG');await expect(page.getByLabel('Decoded certification number')).toHaveValue('1012833027');
+  await page.getByRole('button',{name:'Continue to card details'}).click();await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.identity')).toContainText('1012833027');expect(lookupCount).toBe(0);
+});
+test('CSG and C3G QR URLs reach card details intact without any lookup request',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;
+  await page.route('**/functions/v1/lookup',route=>{lookupCount++;return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'not expected'}});});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';
+  await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,csg);
+  await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.getByLabel('Editable grade candidate')).toHaveValue('8.5');
+  await page.getByLabel('Grading company').selectOption('CSG');await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+  await page.locator('.add-modal .close').click();
+  const c3g='https://www.c3-grading.com/Reports-1008/4301/10084351';
+  await state(page,'');await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,c3g);
+  await expect(page.getByLabel('Certification number')).toHaveValue('10084351');await expect(page.getByLabel('Editable grade candidate')).toHaveCount(0);
+  await page.getByLabel('Grading company').selectOption('C3G');await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.identity')).toContainText('C3G');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('');await expect(page.getByLabel('Certification page URL')).toHaveValue(c3g);
+  expect(lookupCount).toBe(0);
 });
