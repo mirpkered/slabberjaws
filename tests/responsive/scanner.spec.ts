@@ -96,6 +96,19 @@ test('CSG and C3G QR URLs reach card details intact without any lookup request',
   await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await expect(page.getByLabel('Certification number')).toHaveValue('');await expect(page.getByLabel('Grading company')).toHaveValue('Degree');
 });
 
+test('CSG scan evidence stays in the same Add Card session while adding slab photos',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';
+  await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,csg);
+  await expect(page.getByLabel('Editable grade candidate')).toHaveValue('8.5');await page.getByLabel('Grading company').selectOption('CSG');await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+  await page.getByRole('button',{name:'Photograph slab to fill details'}).click();await expect(page.getByLabel('Grading company')).toHaveValue('CSG');await page.getByRole('button',{name:'Continue to photos'}).click();
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="900"><rect width="640" height="900" fill="white"/><text x="70" y="100" font-size="42">2021 Topps</text><text x="70" y="160" font-size="42">#285 Dylan Carlson</text></svg>';
+  await page.locator('input[type=file]').setInputFiles({name:'synthetic-csg-label.svg',mimeType:'image/svg+xml',buffer:Buffer.from(svg)});await page.getByRole('button',{name:'Confirm whole-slab crop'}).click();await page.getByRole('button',{name:'Skip label crop'}).click();
+  await page.getByRole('button',{name:'Continue with front only'}).click();await expect(page.getByRole('heading',{name:'Review crops'})).toBeVisible();await page.getByRole('button',{name:'Return to Card Details'}).click();
+  await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+});
+
 test('Degree scan keeps its supported cert lookup route and leading zeroes',async({page})=>{
   await cameraMock(page);let requestUrl='';let requestBody='';const response={ok:true,card:{id:'fixture',grader:'Degree',certNumber:'00409451',grade:'9',year:'1993',brand:'Topps',set:'Series One',subject:'Joe Oliver',cardNumber:'#14',variant:'',frontImageUrl:'',backImageUrl:'',certUrl:'https://degreegrading.com/certification/00409451/',population:null,graderSpecific:{},addedAt:'2026-09-25'}};
   await page.route('**/api/lookup/**',async route=>{requestUrl=route.request().url();return route.fulfill({json:response});});

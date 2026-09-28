@@ -12,5 +12,5 @@ test('unrecognized successful payload remains available for diagnostic display',
 });
 test('diagnostic UI does not navigate decoded URLs and rescan clears it',()=>{
   assert.doesNotMatch(entry,/window\.location|location\.href|open\(payload\.rawPayload/);
-  assert.match(entry,/setPayload\(null\).*setCert\(''\).*setGrader\(''\)/);
+  assert.match(entry,/setPayload\(null\).*setCert\(''\).*setGrader\(initialGrader\?\?''\)/);
 });

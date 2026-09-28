@@ -30,7 +30,8 @@ import { lookupCertification } from "../lookup/client";
 import { createManualCard } from "../lookup/manual";
 import { ScanEntry } from "../scanner/ScanEntry";
 import { PhotoEntry } from "../photo/PhotoEntry";
-import type { PhotoFields } from "../photo/extract";
+import type { PhotoFields, PhotoFieldSources } from "../photo/extract";
+import { mergeCardEvidence, photoEvidence, sourceCard, type CardEvidenceSources, type EvidenceConflict } from "../photo/evidence";
 import { certificationLinkLabel, generalVerificationUrl, graders, hasAutomaticLookup } from "../graders/registry";
 
 type Grader = NormalizedCard["grader"];
@@ -129,6 +130,10 @@ export default function Home() {
     [lookupGrader, setLookupGrader] = useState<Grader>("Degree"),
     [cert, setCert] = useState(""),
     [draft, setDraft] = useState<Card | null>(null),
+    [evidenceSources, setEvidenceSources] = useState<CardEvidenceSources>({}),
+    [evidenceConflicts, setEvidenceConflicts] = useState<EvidenceConflict[]>([]),
+    [photoReturnToManual, setPhotoReturnToManual] = useState(false),
+    [scanReturnToManual, setScanReturnToManual] = useState(false),
     [lookupMessage, setLookupMessage] = useState(""),
     [looking, setLooking] = useState(false),
     [notice, setNotice] = useState(""),
@@ -261,6 +266,10 @@ export default function Home() {
     setLookupGrader("Degree");
     setCert("");
     setDraft(null);
+    setEvidenceSources({});
+    setEvidenceConflicts([]);
+    setPhotoReturnToManual(false);
+    setScanReturnToManual(false);
     setLookupMessage("");
     setNotice("");
   }
@@ -367,7 +376,9 @@ export default function Home() {
     }
     if (generation !== lookupGeneration.current) return;
     if (!hasAutomaticLookup(requestedGrader)) {
-      setDraft({ ...createManualCard(requestedGrader, requestedCert.trim()), certUrl: generalVerificationUrl(requestedGrader) });
+      const created={ ...createManualCard(requestedGrader, requestedCert.trim()), certUrl: generalVerificationUrl(requestedGrader) };
+      const merged=mergeCardEvidence(draft??created,evidenceSources,created,sourceCard(created,"manual"));
+      setDraft(merged.card);setEvidenceSources(merged.sources);setEvidenceConflicts(merged.conflicts);
       setStep("manual");
       return;
     }
@@ -378,7 +389,11 @@ export default function Home() {
     );
     if (generation !== lookupGeneration.current) return;
     if (result.ok) {
-      setDraft(result.card);
+      const base = draft ?? result.card;
+      const merged = mergeCardEvidence(base, evidenceSources, result.card, sourceCard(result.card, "lookup"));
+      setDraft({...result.card,...merged.card,population:result.card.population,graderSpecific:result.card.graderSpecific,addedAt:result.card.addedAt});
+      setEvidenceSources(merged.sources);
+      setEvidenceConflicts(merged.conflicts);
       setStep("preview");
     } else {
       setLookupMessage(result.message);
@@ -391,12 +406,22 @@ export default function Home() {
     resetAddSession();
   }
   function beginManual() {
-    setDraft({...createManualCard(lookupGrader, cert),certUrl:generalVerificationUrl(lookupGrader)});
+    const created={...createManualCard(lookupGrader, cert),certUrl:generalVerificationUrl(lookupGrader)};
+    const merged=mergeCardEvidence(draft??created,evidenceSources,created,sourceCard(created,"manual"));
+    setDraft(merged.card);setEvidenceSources(merged.sources);setEvidenceConflicts(merged.conflicts);
     setStep("manual");
   }
   function update(key: keyof Card, value: string) {
     if (key === "certNumber") setCert(value);
     setDraft((d) => (d ? { ...d, [key]: value } : d));
+    setEvidenceSources((current) => ({...current,[key]:"manual"}));
+  }
+  function photoFieldsFromCard(card: Card): PhotoFields {
+    return {certNumber:card.certNumber,grade:card.grade,year:card.year,brand:card.brand,set:card.set,subject:card.subject,cardNumber:card.cardNumber,variant:card.variant};
+  }
+  function chooseConflict(conflict: EvidenceConflict, value: string) {
+    update(conflict.field, value);
+    setEvidenceConflicts((current)=>current.filter(item=>item!==conflict));
   }
   async function save() {
     if (!draft?.subject || !draft.grade) {
@@ -772,16 +797,31 @@ export default function Home() {
             {step === "scan" && (
               <ScanEntry
                 graders={graders}
-                onCancel={() => setStep("lookup")}
+                initialGrader={scanReturnToManual ? draft?.grader : undefined}
+                onCancel={() => { setStep(scanReturnToManual ? "manual" : "lookup"); setScanReturnToManual(false); }}
                 onManual={(value, selected) => {
                   if (value) setCert(value);
                   if (selected) setLookupGrader(selected);
-                  setStep("lookup");
+                  if(scanReturnToManual&&draft){
+                    const patch:Partial<Card>={...(value?{certNumber:value}:{}),...(selected?{grader:selected}:{})};
+                    const sources:CardEvidenceSources={...(value?{certNumber:"manual" as const}:{}),...(selected?{grader:"manual" as const}:{})};
+                    const merged=mergeCardEvidence(draft,evidenceSources,patch,sources);
+                    setDraft(merged.card);setEvidenceSources(merged.sources);setEvidenceConflicts(merged.conflicts);setCert(merged.card.certNumber);
+                  }
+                  setStep(scanReturnToManual ? "manual" : "lookup");
+                  setScanReturnToManual(false);
                 }}
                 onManualDetails={(selected, value, extra) => {
+                  const base = draft ?? createManualCard(selected, value);
+                  const incoming = {...createManualCard(selected,value), ...(extra?.certUrl?{certUrl:extra.certUrl}:{}), ...(extra?.grade?{grade:extra.grade}:{})};
+                  const incomingSources:CardEvidenceSources={grader:"manual",certNumber:"scan",...(extra?.certUrl?{certUrl:"scan" as const}:{}),...(extra?.grade?{grade:"scan" as const}:{})};
+                  const merged=mergeCardEvidence(base,draft?evidenceSources:{},incoming,incomingSources);
                   setLookupGrader(selected);
-                  setCert(value);
-                  setDraft({...createManualCard(selected, value), ...(extra?.certUrl?{certUrl:extra.certUrl}:{}), ...(extra?.grade?{grade:extra.grade}:{})});
+                  setCert(merged.card.certNumber);
+                  setDraft(merged.card);
+                  setEvidenceSources(merged.sources);
+                  setEvidenceConflicts(merged.conflicts);
+                  setScanReturnToManual(false);
                   setStep("manual");
                 }}
                 onConfirm={(selected, value) => {
@@ -793,17 +833,19 @@ export default function Home() {
             {step === "photos" && (
               <PhotoEntry
                 graders={graders}
-                onCancel={() => setStep("lookup")}
-                onManualDetails={(selected, fields: PhotoFields) => {
+                initialGrader={draft?.grader}
+                initialFields={draft ? photoFieldsFromCard(draft) : undefined}
+                onCancel={() => { setStep(photoReturnToManual ? "manual" : "lookup"); setPhotoReturnToManual(false); }}
+                onManualDetails={(selected, fields: PhotoFields, fieldSources: PhotoFieldSources) => {
+                  const base=draft??{...createManualCard(selected,fields.certNumber),certUrl:generalVerificationUrl(selected)};
+                  const photo=photoEvidence(fields,selected,fieldSources);
+                  const merged=mergeCardEvidence(base,draft?evidenceSources:{},photo.patch,photo.sources);
                   setLookupGrader(selected);
-                  setCert(fields.certNumber);
-                  setDraft({
-                    ...createManualCard(selected, fields.certNumber),
-                    ...(generalVerificationUrl(selected)?{certUrl:generalVerificationUrl(selected)}:{}),
-                    ...fields,
-                    grader: selected,
-                    certNumber: fields.certNumber,
-                  });
+                  setCert(merged.card.certNumber);
+                  setDraft(merged.card);
+                  setEvidenceSources(merged.sources);
+                  setEvidenceConflicts(merged.conflicts);
+                  setPhotoReturnToManual(false);
                   setStep("manual");
                 }}
               />
@@ -918,6 +960,11 @@ export default function Home() {
                   <span>{draft.grader}</span>
                   <code>{draft.certNumber}</code>
                 </div>
+                <div className="manual-identification-actions">
+                  <button className="account-button wide" onClick={() => { setPhotoReturnToManual(true); setStep("photos"); }}>Photograph slab to fill details</button>
+                  <button className="account-button wide" onClick={() => { setScanReturnToManual(true); setStep("scan"); }}>Scan slab to add or confirm certification</button>
+                </div>
+                {evidenceConflicts.length>0&&<section className="evidence-conflicts" aria-label="Conflicting identification suggestions"><strong>Conflicting suggestions — review</strong>{evidenceConflicts.map((conflict,index)=><div key={`${String(conflict.field)}-${index}`}><span>{String(conflict.field)}: existing “{conflict.existing}” · new {conflict.incomingSource} “{conflict.incoming}”</span><button className="account-button" onClick={()=>chooseConflict(conflict,conflict.existing)}>Keep existing</button><button className="text-button" onClick={()=>chooseConflict(conflict,conflict.incoming)}>Use suggestion</button></div>)}</section>}
                 <div className="manual-grid">
                   {(
                     [

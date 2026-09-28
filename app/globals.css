@@ -512,6 +512,10 @@ a:focus-visible {
   margin-top: 18px;
   font-size: 0.76rem;
 }
+.manual-identification-actions { display: grid; gap: 8px; margin: 12px 0; }
+.evidence-conflicts { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border-left: 4px solid var(--accent); background: var(--surface-raised); }
+.evidence-conflicts > div { display: grid; gap: 8px; overflow-wrap: anywhere; }
+.evidence-conflicts .account-button, .evidence-conflicts .text-button { min-height: 44px; margin: 0; }
 .detail-modal {
   width: min(940px, 100%);
   display: grid;
@@ -609,6 +613,8 @@ a:focus-visible {
   }
 }
 @media (max-width: 640px) {
+  .evidence-conflicts > div { grid-template-columns: 1fr 1fr; }
+  .evidence-conflicts > div > span { grid-column: 1 / -1; }
   .topbar {
     height: 66px;
   }

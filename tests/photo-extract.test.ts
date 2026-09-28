@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyPhotoFields, extractPhotoFields, fieldsFromConfidentRegions, mergeOcrFields } from "../photo/extract.ts";
+import { autoFillPhotoCandidates, emptyPhotoFields, extractPhotoFields, fieldsFromConfidentRegions, mergeOcrFields } from "../photo/extract.ts";
 import { containedImageRect, fullCrop, moveCropByDisplayDelta, resizeCropByDisplayDelta, resizeCropFromCorner, sourceCrop, validCrop } from "../photo/crop.ts";
 
 test("photo OCR extraction preserves an explicitly labelled leading-zero cert", () => {
@@ -79,4 +79,34 @@ test("OCR offers restrained editable label candidates without committing uncerta
 test("weak OCR regions remain review-only instead of auto-filling card fields",()=>{
   assert.deepEqual(fieldsFromConfidentRegions([{text:'CERTIFICATION NUMBER: 1012833027\nGRADE: 8.5',confidence:34}]),emptyPhotoFields());
   assert.equal(fieldsFromConfidentRegions([{text:'CERTIFICATION NUMBER: 001012833027\nGRADE: 8.5',confidence:76}]).certNumber,'001012833027');
+});
+test("synthetic grader label yields year, brand, number, multiword subject, and decimal-grade suggestions",()=>{
+  const result=extractPhotoFields('CSG\n2021 Topps\n#285 Dylan Carlson\n8.5');
+  for(const [field,value] of [['year','2021'],['brand','Topps'],['cardNumber','285'],['subject','Dylan Carlson'],['grade','8.5']] as const)assert.ok(result.candidates.some(item=>item.field===field&&item.value===value),`${field} ${value}`);
+  assert.equal(result.fields.set,'');assert.equal(result.fields.variant,'');
+  const fill=autoFillPhotoCandidates(result.candidates,82,true);
+  assert.deepEqual(fill.fields,{...emptyPhotoFields(),year:'2021',brand:'Topps',cardNumber:'285',subject:'Dylan Carlson'});
+  assert.equal(fill.fields.grade,'');
+});
+test("label parsing supports varied years, brands, long names, alphanumeric and hyphenated card numbers",()=>{
+  const result=extractPhotoFields('2023 Panini Prizm\n#US175 Roberto Clemente Jr.\n#T89C-42 Billy Dee Williams\nGRADE: 9.5');
+  assert.ok(result.candidates.some(item=>item.field==='year'&&item.value==='2023'));
+  assert.ok(result.candidates.some(item=>item.field==='brand'&&item.value==='Panini'));
+  assert.ok(result.candidates.some(item=>item.field==='cardNumber'&&item.value==='US175'));
+  assert.ok(result.candidates.some(item=>item.field==='subject'&&item.value==='Roberto Clemente Jr.'));
+  assert.ok(result.candidates.some(item=>item.field==='cardNumber'&&item.value==='T89C-42'));
+  assert.ok(result.candidates.some(item=>item.field==='grade'&&item.value==='9.5'));
+  assert.ok(extractPhotoFields('CSG\n#1A DYLAN CARLSON').candidates.some(item=>item.field==='subject'&&item.value==='DYLAN CARLSON'));
+});
+test("candidate filtering rejects a lone lowercase artifact and consolidates equivalent duplicates",()=>{
+  const result=extractPhotoFields('CSG\n2021 Topps\n#285 Dylan Carlson\nCARD NUMBER: a\n# 285');
+  assert.equal(result.candidates.some(item=>item.field==='cardNumber'&&item.value.toLowerCase()==='a'),false);
+  assert.equal(result.candidates.filter(item=>item.field==='cardNumber'&&item.value==='285').length,1);
+  assert.equal(extractPhotoFields('CSG','8').candidates.some(item=>item.field==='grade'&&item.value==='8'),false);
+});
+test("conflicting OCR grade remains a suggestion and protected scan grade stays unchanged",()=>{
+  const result=extractPhotoFields('CSG\nGRADE: 8');
+  assert.ok(result.candidates.some(item=>item.field==='grade'&&item.value==='8'));
+  const merged=mergeOcrFields({...emptyPhotoFields(),grade:'8.5'},fieldsFromConfidentRegions([{text:'GRADE: 8',confidence:90}]),new Set(['grade']));
+  assert.equal(merged.grade,'8.5');
 });
