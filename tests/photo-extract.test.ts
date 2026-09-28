@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { autoFillPhotoCandidates, emptyPhotoFields, extractPhotoFields, fieldsFromConfidentRegions, mergeOcrFields } from "../photo/extract.ts";
+import { autoFillPhotoCandidates, emptyPhotoFields, extractPhotoFields, extractPhotoFieldsDetailed, fieldsFromConfidentRegions, mergeOcrFields } from "../photo/extract.ts";
 import { containedImageRect, fullCrop, moveCropByDisplayDelta, resizeCropByDisplayDelta, resizeCropFromCorner, sourceCrop, validCrop } from "../photo/crop.ts";
 
 test("photo OCR extraction preserves an explicitly labelled leading-zero cert", () => {
@@ -55,18 +55,18 @@ test("corner resizing clamps at source-image edges and minimum dimensions",()=>{
   assert.deepEqual(resizeCropFromCorner({x:20,y:20,width:40,height:40},1000,1000,{width:100,height:100},"bottom-right"),{x:20,y:20,width:80,height:80});
   assert.deepEqual(resizeCropFromCorner({x:20,y:20,width:40,height:40},1000,1000,{width:100,height:100},"top-left"),{x:52,y:52,width:8,height:8});
 });
-test("unlabelled slab text becomes review candidates, not silently committed",()=>{
+test("unlabelled slab text does not become an unsupported subject candidate",()=>{
   const result=extractPhotoFields("1999 POKEMON GAME\nCHARIZARD\nHOLO\nGRADE 8");
   assert.equal(result.fields.grade,"8");assert.equal(result.fields.year,"");
   assert.ok(result.candidates.some(x=>x.field==='year'&&x.value==='1999'));
-  assert.ok(result.candidates.some(x=>x.field==='subject'&&x.value==='CHARIZARD'));
+  assert.equal(result.candidates.some(x=>x.field==='subject'&&x.value==='CHARIZARD'),false);
 });
 test("user corrections survive a later OCR run",()=>{
   const current={...emptyPhotoFields(),subject:'My correction'};const next={...emptyPhotoFields(),subject:'OCR replacement',grade:'9'};
   assert.deepEqual(mergeOcrFields(current,next,new Set(['subject'])),{...current,grade:'9'});
 });
 test("OCR offers restrained editable label candidates without committing uncertain values",()=>{
-  const result=extractPhotoFields("CSG\n/021 Topps pil =\nDylan Carlson\n#285\n8.5", "1012833027");
+  const result=extractPhotoFields("CSG\n/021 Topps pil =\n#285 Dylan Carlson\n8.5", "1012833027");
   assert.equal(result.fields.certNumber, "");
   assert.equal(result.fields.year, "");
   assert.ok(result.candidates.some(candidate=>candidate.field==='certNumber'&&candidate.value==='1012833027'));
@@ -103,6 +103,12 @@ test("candidate filtering rejects a lone lowercase artifact and consolidates equ
   assert.equal(result.candidates.some(item=>item.field==='cardNumber'&&item.value.toLowerCase()==='a'),false);
   assert.equal(result.candidates.filter(item=>item.field==='cardNumber'&&item.value==='285').length,1);
   assert.equal(extractPhotoFields('CSG','8').candidates.some(item=>item.field==='grade'&&item.value==='8'),false);
+});
+
+test("random OCR fragments are diagnostic rejections, not subject suggestions",()=>{
+ const result=extractPhotoFieldsDetailed('li i ei\nAES Eee i l\nWee h ye\nprs Fo Tin\n#285 Dylan Carlson');
+ assert.deepEqual(result.candidates.filter(candidate=>candidate.field==='subject').map(candidate=>candidate.value),['Dylan Carlson']);
+ assert.deepEqual(result.rejected.filter(candidate=>candidate.field==='subject').map(candidate=>candidate.value),['li i ei','AES Eee i l','Wee h ye','prs Fo Tin']);
 });
 test("conflicting OCR grade remains a suggestion and protected scan grade stays unchanged",()=>{
   const result=extractPhotoFields('CSG\nGRADE: 8');

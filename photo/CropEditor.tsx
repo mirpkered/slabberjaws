@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { containedImageRect, moveCropByDisplayDelta, resizeCropFromCorner, type Crop, type CropCorner } from "./crop";
 
-type Props = { src: string; alt: string; crop: Crop; onChange(crop: Crop): void };
+type Props = { src: string; alt: string; crop: Crop; onChange(crop: Crop): void; onMetrics?(metrics:{naturalWidth:number;naturalHeight:number;displayWidth:number;displayHeight:number}):void };
 type Size = { width: number; height: number };
 type Drag = { pointerId: number; x: number; y: number; crop: Crop; mode: "move" | "resize"; corner?: CropCorner };
 
 /** Touch-safe crop editor. Crop percentages are relative to the visible, object-fit:contain image, not its letterboxed stage. */
-export function CropEditor({ src, alt, crop, onChange }: Props) {
+export function CropEditor({ src, alt, crop, onChange, onMetrics }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
   const [stageSize, setStageSize] = useState<Size>({ width: 0, height: 0 });
@@ -59,7 +59,7 @@ export function CropEditor({ src, alt, crop, onChange }: Props) {
 
   return <div className="crop-stage" ref={stage} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
     <div className="crop-image-frame" style={{ width: imageRect.width, height: imageRect.height, left: imageRect.x, top: imageRect.y }}>
-      <img src={src} alt={alt} draggable={false} onLoad={event => setImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
+      <img src={src} alt={alt} draggable={false} onLoad={event => {const image=event.currentTarget;const next={width:image.naturalWidth,height:image.naturalHeight};setImageSize(next);onMetrics?.({naturalWidth:next.width,naturalHeight:next.height,displayWidth:image.getBoundingClientRect().width,displayHeight:image.getBoundingClientRect().height});}} />
       <div className="crop-box" data-crop-move="true" role="group" aria-label="Crop region; drag inside to move" style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.width}%`, height: `${crop.height}%` }} onPointerDown={pointerDown}>
         {(["top-left","top-right","bottom-left","bottom-right"] as CropCorner[]).map(corner=><button key={corner} className={`crop-handle crop-handle-${corner}`} data-crop-resize={corner} type="button" aria-label={`Resize crop ${corner}`} onKeyDown={event=>keyboardResize(event,corner)} />)}
       </div>

@@ -7,17 +7,19 @@ import { classifyScanPayload } from './payload-classification';
 import { sourceRect } from './frame';
 import { hasAutomaticLookup } from '../graders/registry';
 import { certAfterGraderSelection, confirmedScanHandoff } from './handoff';
+import { scanDiagnostic } from './diagnostic';
 
 type Grader = NormalizedCard['grader'];
-type Props = { graders: Grader[]; initialGrader?: Grader; onConfirm(grader: Grader, cert: string): void; onManual(cert: string, grader?: Grader): void; onManualDetails(grader: Grader, cert: string, extra?:{certUrl?:string;grade?:string}): void; onCancel(): void };
+type Props = { graders: Grader[]; initialGrader?: Grader; diagnosticsEnabled?: boolean; onConfirm(grader: Grader, cert: string): void; onManual(cert: string, grader?: Grader): void; onManualDetails(grader: Grader, cert: string, extra?:{certUrl?:string;grade?:string}): void; onCancel(): void };
 const isDev = (import.meta as ImportMeta & {env?: Record<string, boolean | undefined>}).env?.DEV;
-export function ScanEntry({graders,initialGrader,onConfirm,onManual,onManualDetails,onCancel}: Props) {
+export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConfirm,onManual,onManualDetails,onCancel}: Props) {
   const video = useRef<HTMLVideoElement>(null);
   const cameraSurface = useRef<HTMLDivElement>(null);
   const camera = useRef<ReturnType<typeof startCamera> | null>(null);
   const pointers = useRef(new Map<number,{x:number;y:number}>());
   const [attempt,setAttempt] = useState(0), [payload,setPayload] = useState<ScanPayload | null>(null), [barcodeCandidate,setBarcodeCandidate] = useState('');
   const [cert,setCert] = useState(''), [grader,setGrader] = useState<Grader | ''>(initialGrader??''), [gradeCandidate,setGradeCandidate] = useState('');
+  const [acceptedFormat,setAcceptedFormat] = useState('');
   const [error,setError] = useState(''), [status,setStatus] = useState('Requesting camera access…'), [copyStatus,setCopyStatus] = useState('');
   const [hasTorch,setHasTorch] = useState(false), [torch,setTorch] = useState(false), [diagnostics,setDiagnostics] = useState<CameraDiagnostics | null>(null), [focusPoint,setFocusPoint] = useState<{x:number;y:number}|null>(null);
   useEffect(() => {
@@ -25,7 +27,7 @@ export function ScanEntry({graders,initialGrader,onConfirm,onManual,onManualDeta
     const current = startCamera({video:video.current,onRead(raw,format='') {
       const parsed = parseScanPayload(raw), classification=classifyScanPayload(raw);
       const normalizedFormat=format.toLowerCase();const linearIdBarcode=/code[_ -]?(?:128|39)/i.test(normalizedFormat)?parsed.certNumber??'':'';
-      setStatus('Code found'); setPayload(parsed); setBarcodeCandidate(linearIdBarcode);setCert(classification.kind==='grader-certification-url'?classification.payload.certNumber??'':normalizedFormat.includes('qr')?parsed.certNumber??'':''); setGradeCandidate(classification.kind==='grader-certification-url'?classification.gradeCandidate??'':''); setGrader(initialGrader??''); setHasTorch(false);
+      setStatus('Code found'); setPayload(parsed); setAcceptedFormat(format); setBarcodeCandidate(linearIdBarcode);setCert(classification.kind==='grader-certification-url'?classification.payload.certNumber??'':normalizedFormat.includes('qr')?parsed.certNumber??'':''); setGradeCandidate(classification.kind==='grader-certification-url'?classification.gradeCandidate??'':''); setGrader(initialGrader??''); setHasTorch(false);
     },onError:setError,onReady(supported, details) {setHasTorch(supported);setDiagnostics(details);setStatus('Looking for a barcode or QR code…');}});
     camera.current = current;
     const interrupt = () => { current.stop(); setError('Scanning paused. Tap Rescan to restart the camera.'); };
@@ -34,7 +36,7 @@ export function ScanEntry({graders,initialGrader,onConfirm,onManual,onManualDeta
     window.addEventListener('pagehide',interrupt);
     return () => {current.stop(); camera.current = null;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',interrupt);};
   },[attempt,payload,initialGrader]);
-  function reset() {camera.current?.stop();setPayload(null);setBarcodeCandidate('');setCert('');setGrader(initialGrader??'');setGradeCandidate('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setCopyStatus('');setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  function reset() {camera.current?.stop();setPayload(null);setAcceptedFormat('');setBarcodeCandidate('');setCert('');setGrader(initialGrader??'');setGradeCandidate('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setCopyStatus('');setStatus('Requesting camera access…');setAttempt(value=>value+1);}
   function selectGrader(value:Grader|''){setGrader(value);setCert(current=>certAfterGraderSelection(value,current,barcodeCandidate));}
   async function copyRaw() { if(!payload) return; try { await navigator.clipboard.writeText(payload.rawPayload); setCopyStatus('Copied'); } catch { setCopyStatus('Select and copy the decoded data below.'); } }
   async function scanStill() { setStatus('Scanning this frame…'); const surface=cameraSurface.current?.getBoundingClientRect(), target=cameraSurface.current?.querySelector('.scan-target')?.getBoundingClientRect(), v=video.current; const region=surface&&target&&v?.videoWidth ? sourceRect({width:v.videoWidth,height:v.videoHeight},{x:surface.x,y:surface.y,width:surface.width,height:surface.height},{x:target.x,y:target.y,width:target.width,height:target.height}) : undefined; const result=await camera.current?.scanStill(region); if(!result?.raw) setStatus(`Couldn't read that code. Hold it steady and try again, or enter the cert manually.`); }
@@ -46,7 +48,16 @@ export function ScanEntry({graders,initialGrader,onConfirm,onManual,onManualDeta
   function pointerUp(event:PointerEvent<HTMLDivElement>) { pointers.current.delete(event.pointerId); if(pointers.current.size<2) pinchStart.current=null; }
   async function tapFocus(event:PointerEvent<HTMLDivElement>) { if(!diagnostics?.pointsOfInterest || pointers.current.size>1) return; const rect=event.currentTarget.getBoundingClientRect(), x=(event.clientX-rect.left)/rect.width, y=(event.clientY-rect.top)/rect.height; if(await camera.current?.focusAt(x,y)) { setFocusPoint({x:x*100,y:y*100}); window.setTimeout(()=>setFocusPoint(null),900); } }
   // Raw text exists only in this mounted component. Confirmation emits just grader + cert.
-  function manual() {camera.current?.stop();onManual(cert,grader || undefined);}
+  function manual() {
+    camera.current?.stop();
+    const classification=payload?classifyScanPayload(payload.rawPayload):undefined;
+    // The secondary manual-entry button must not discard structured QR fields.
+    if(grader&&cert.trim()&&classification?.kind==='grader-certification-url'){
+      onManualDetails(grader,cert.trim(),{certUrl:classification.certUrl,...(gradeCandidate?{grade:gradeCandidate}:{})});
+      return;
+    }
+    onManual(cert,grader || undefined);
+  }
   return <div className={`scan-entry ${payload ? 'scan-confirmation' : 'scan-active'}`}>
     {payload ? <>
       {(() => { const classification=classifyScanPayload(payload.rawPayload); return classification.kind==='grader-certification-url' ? <div className="generic-url-flow"><p className="eyebrow">CODE READ SUCCESSFULLY</p><h3>Certification link found</h3><p className="muted">Confirm the grading company, then review the card details. Slabberjaws has not verified this certification.</p><label className="field">Grading company<select value={grader} onChange={event=>setGrader(event.target.value as Grader)}><option value="">Suggested: {classification.suggestedGrader} — confirm company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label><label className="field">Certification number<input value={cert} onChange={event=>setCert(event.target.value)} autoComplete="off"/></label>{gradeCandidate&&<label className="field">Editable grade candidate<input value={gradeCandidate} onChange={event=>setGradeCandidate(event.target.value)}/></label>}{grader&&grader!==classification.suggestedGrader&&<p role="status" className="form-message">This link format is associated with {classification.suggestedGrader}. Your selected grader will be used for this card.</p>}<button className="primary wide" disabled={!grader||!cert.trim()} onClick={()=>{const handoff=confirmedScanHandoff(payload.rawPayload,grader,cert,gradeCandidate);if(handoff?.kind==='manual')onManualDetails(handoff.grader,handoff.certNumber,{certUrl:handoff.certUrl,grade:handoff.grade});else if(handoff?.kind==='lookup')onConfirm(handoff.grader,handoff.certNumber);}}>Continue to card details</button></div> : classification.kind==='generic-grader-url' ? <div className="generic-url-flow"><p className="eyebrow">CODE READ SUCCESSFULLY</p><h3>This QR code links to the grading company’s website.</h3><p className="muted">It doesn’t contain a certification number. Enter the number printed on your slab to continue.</p><label className="field">Grading company<select value={grader} onChange={event=>setGrader(event.target.value as Grader)}><option value="">Suggested: {classification.suggestedGrader} — confirm company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label><label className="field">Certification number<input autoFocus value={cert} onChange={event=>setCert(event.target.value)} inputMode="text" autoComplete="off"/></label><button className="primary wide" disabled={!grader||!cert.trim()} onClick={()=>{const handoff=confirmedScanHandoff(payload.rawPayload,grader,cert);if(handoff?.kind==='manual')onManualDetails(handoff.grader,handoff.certNumber);else if(handoff?.kind==='lookup')onConfirm(handoff.grader,handoff.certNumber);}}>Continue to card details</button><details className="raw-payload"><summary>Decoded raw data</summary><code>{payload.rawPayload}</code><button type="button" className="account-button" onClick={()=>void copyRaw()}>Copy raw data</button>{copyStatus&&<p role="status">{copyStatus}</p>}</details></div> : <><h3>Which grading company is this?</h3>
@@ -66,6 +77,7 @@ export function ScanEntry({graders,initialGrader,onConfirm,onManual,onManualDeta
       {isDev && diagnostics && <p className="scan-diagnostics">Decoder: {diagnostics.decoder} · source: {diagnostics.width}×{diagnostics.height} · {diagnostics.formats.join(', ')}</p>}
       <div className="scan-desktop-actions">{hasTorch && !error && <button className="account-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Turn flashlight {torch?'off':'on'}</button>}<button className="text-button" onClick={()=>{camera.current?.stop();onCancel();}}>Cancel scan</button></div>
     </>}
+    {diagnosticsEnabled&&payload&&(()=>{const info=scanDiagnostic(payload.rawPayload,acceptedFormat,grader);return <details className="scan-payload-diagnostics" open><summary>Scan diagnostics (local only)</summary><dl><dt>Code type / source</dt><dd>{info.source}</dd><dt>Raw decoded value</dt><dd><code>{info.raw}</code></dd><dt>Normalized grader</dt><dd>{info.grader||'Not selected'}</dd><dt>Normalized cert</dt><dd>{info.cert||'None'}</dd><dt>Normalized grade</dt><dd>{info.grade||'None'}</dd><dt>Verification URL</dt><dd>{info.verificationUrl||'None'}</dd></dl></details>;})()}
     {(payload || error) && <button className="text-button" onClick={reset}>Rescan</button>}
     <button className="text-button scan-manual" onClick={manual}>Enter Cert Manually</button>
     {payload && <button className="text-button" onClick={()=>{camera.current?.stop();onCancel();}}>Cancel scan</button>}

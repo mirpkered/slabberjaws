@@ -21,6 +21,7 @@ async function cameraMock(page: Page) {
   });
 }
 async function state(page:Page,raw:string,format='qr_code') {await page.evaluate(value=>{const target=(window as unknown as {scanTest:{raw:string;format:string}}).scanTest;target.raw=value.raw;target.format=value.format;},{raw,format});}
+async function openAdd(page:Page){const mobile=page.locator('.floating-add');if(await mobile.isVisible())await mobile.click();else await page.locator('.desktop-add').click();}
 async function fits(page:Page){expect(await page.evaluate(()=>({document:document.documentElement.scrollWidth<=innerWidth,elements:[...document.querySelectorAll('.add-modal, .add-modal *')].every(el=>{const r=el.getBoundingClientRect();return !r.width || (r.left>=0&&r.right<=innerWidth+1);})}))).toEqual({document:true,elements:true});}
 for(const [width,height] of [[320,568],[375,667],[390,844],[430,932],[768,1024],[1024,768],[1440,900]]){
   test(`scanner ${width}px confirmation and unavailable lookup`,async({page},info)=>{
@@ -28,7 +29,7 @@ for(const [width,height] of [[320,568],[375,667],[390,844],[430,932],[768,1024],
     const requests:string[]=[];
     await page.route('**/api/lookup/**',route=>{requests.push(route.request().url());return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'Lookup unavailable.'}});});
     await page.route('**/functions/v1/lookup',route=>{requests.push(route.request().postData()??'');return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'Lookup unavailable.'}});});
-    await page.goto('./',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
+    await page.goto('./',{waitUntil:'networkidle'});await openAdd(page);await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
     await expect(page.getByRole('button',{name:'Turn flashlight on'})).toBeVisible();await fits(page);
     const geometry=await page.evaluate(()=>{const camera=document.querySelector('.scan-camera')!.getBoundingClientRect(),target=document.querySelector('.scan-target')!.getBoundingClientRect(),video=document.querySelector('.scan-camera video')!;return {ratio:camera.width/camera.height,objectFit:getComputedStyle(video).objectFit,targetInside:target.left>=camera.left&&target.right<=camera.right&&target.top>=camera.top&&target.bottom<=camera.bottom};});
     expect(geometry.objectFit).toBe('cover');expect(geometry.targetInside).toBe(true);expect(geometry.ratio).toBeGreaterThan(width<=640?.45:1.2);expect(geometry.ratio).toBeLessThan(width<=640?1.15:1.45);
@@ -67,6 +68,29 @@ test('scanner cancel, rescan, unsupported text, permission denial and close rele
   await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();
   // Closing discards the entire scan component, including raw payload/confirmation.
   await expect(page.getByLabel('Decoded certification number')).toHaveCount(0);
+});
+test('diagnostic mode distinguishes CSG QR URL from Code 128 while normal mode stays clean',async({page})=>{
+ await cameraMock(page);await page.addInitScript(()=>Object.assign(window,{__SLABBERJAWS_OCR_TEST_WORKER__:async()=>({async setParameters(){},async recognize(){return{data:{text:'2021 Topps\n#285 Dylan Carlson\n8.5\nli i ei',confidence:94}}},async terminate(){}})}));
+ await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
+ const qr='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';await state(page,qr,'qr_code');await page.getByLabel('Grading company').selectOption('CSG');
+ const diagnostic=page.locator('.scan-payload-diagnostics');await expect(diagnostic).toContainText('QR URL');await expect(diagnostic).toContainText('Normalized graderCSG');await expect(diagnostic).toContainText('Normalized cert1012833027');await expect(diagnostic).toContainText('Normalized grade8.5');await expect(diagnostic).toContainText(qr);
+ await page.getByRole('button',{name:'Continue to card details'}).click();await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+ await page.getByRole('button',{name:'Photograph slab to fill details'}).click();await expect(page.locator('.photo-carried-values')).toContainText('Cert 1012833027');await expect(page.locator('.photo-carried-values')).toContainText('Grade 8.5');await page.getByRole('button',{name:'Continue to photos'}).click();
+ const svg='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="900"><rect width="640" height="900" fill="white"/><text x="70" y="100" font-size="42">2021 Topps</text><text x="70" y="160" font-size="42">#285 Dylan Carlson</text></svg>';
+ await page.locator('input[type=file]').setInputFiles({name:'synthetic-diagnostic.svg',mimeType:'image/svg+xml',buffer:Buffer.from(svg)});await page.getByRole('button',{name:'Confirm whole-slab crop'}).click();await page.getByRole('button',{name:'Skip label crop'}).click();await page.getByRole('button',{name:'Continue with front only'}).click();await page.getByRole('button',{name:'Read label text'}).click();
+ const ocr=page.locator('.ocr-diagnostics');await expect(ocr).toBeVisible();await expect(ocr).toContainText('Exact final Tesseract input');await expect(ocr).toContainText('640 × 900px');await expect(ocr).toContainText('Raw Tesseract text');await expect(ocr).toContainText('2021 Topps');await expect(ocr).toContainText('Normalized OCR text');await expect(ocr).toContainText('Extracted candidates');await expect(ocr).toContainText('Filtered / rejected candidates');await expect(ocr).toContainText('li i ei');
+ await expect(page.locator('.photo-entry .manual-grid').getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.photo-entry .manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+ await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await state(page,'');await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,'1012833027','code_128');await page.getByLabel('Grading company').selectOption('CSG');
+ const barcodeDiagnostic=page.locator('.scan-payload-diagnostics');await expect(barcodeDiagnostic).toContainText('Linear barcode — Code 128');await expect(barcodeDiagnostic).toContainText('Normalized cert1012833027');await expect(barcodeDiagnostic).toContainText('Normalized gradeNone');await expect(barcodeDiagnostic).toContainText('Verification URLNone');
+});
+test('diagnostic-only scan output is hidden unless diagnostics=1 is present',async({page})=>{
+ await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});await page.locator('.desktop-add').click();await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,'https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/','qr_code');
+ await expect(page.locator('.scan-payload-diagnostics')).toHaveCount(0);
+});
+test('secondary manual handoff retains CSG QR grade and URL instead of dropping structured values',async({page})=>{
+ await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});await openAdd(page);await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
+ const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';await state(page,csg);await page.getByLabel('Grading company').selectOption('CSG');await page.getByRole('button',{name:'Enter Cert Manually'}).click();
+ await expect(page.locator('.manual-grid').getByLabel('Certification number')).toHaveValue('1012833027');await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
 });
 test('CSG Code 128 cert is held as a candidate until CSG is explicitly selected, then skips unsupported lookup',async({page})=>{
   await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;

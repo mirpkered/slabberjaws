@@ -1,5 +1,7 @@
 export type PhotoFields={certNumber:string;grade:string;year:string;brand:string;set:string;subject:string;cardNumber:string;variant:string};
 export type Candidate={field:keyof PhotoFields;value:string;reason:string;autoFill?:boolean};
+export type RejectedCandidate={field:keyof PhotoFields;value:string;reason:string};
+export type PhotoExtraction={fields:PhotoFields;candidates:Candidate[];rejected:RejectedCandidate[]};
 export type PhotoFieldSource='ocr'|'manual';
 export type PhotoFieldSources=Partial<Record<keyof PhotoFields,PhotoFieldSource>>;
 export const emptyPhotoFields=():PhotoFields=>({certNumber:'',grade:'',year:'',brand:'',set:'',subject:'',cardNumber:'',variant:''});
@@ -11,6 +13,7 @@ const unique=(values:Candidate[])=>values.filter((candidate,index,list)=>list.fi
 const plausibleCardNumber=(value:string)=>value.length>0&&!/^[a-z]$/i.test(value)&&/^[A-Za-z0-9]+(?:[-/][A-Za-z0-9]+)*$/.test(value);
 const plausibleName=(value:string)=>value.length>=4&&value.length<=64&&(/^[\p{L}][\p{L}.'’-]*(?:\s+[\p{L}][\p{L}.'’-]*){1,5}$/u.test(value)||/^[A-Z][A-Z.'’-]{1,}(?:\s+[A-Z][A-Z.'’-]{1,}){1,5}$/.test(value))&&!/(?:cert|grade|pop|card|surface|corner|edge|center|csg|psa|sgc|gas|slab)/i.test(value);
 const plausibleSubjectLine=(value:string)=>plausibleName(value)||(/^[A-Z][A-Z.'’-]{5,}$/.test(value)&&!/(?:CERT|GRADE|SURFACE|CORNER|CENTER|SLAB)/.test(value));
+export const normalizeOcrText=(text:string)=>text.split(/\r?\n/).map(clean).filter(Boolean).join('\n');
 function labelled(text:string,labels:string[]){
  const linePattern=new RegExp(`^\\s*(?:${labels.join('|')})\\s*[:#-]?\\s*(.*?)\\s*$`,'i');
  const lines=text.split(/\r?\n/).map(clean);
@@ -27,8 +30,8 @@ function explicitCardName(text:string){
  return plausibleName(value)?value:'';
 }
 /** Parse OCR text only. Values remain suggestions unless independently strong. */
-export function extractPhotoFields(...texts:string[]):{fields:PhotoFields;candidates:Candidate[]}{
- const text=texts.filter(Boolean).join('\n'),lineEntries=texts.flatMap(value=>{const lines=value.split(/\r?\n/).map(clean).filter(Boolean);return lines.map((line,index)=>({line,nearbyLabel:lines.slice(Math.max(0,index-3),Math.min(lines.length,index+4)).join(' ')}));}),fields=emptyPhotoFields(),candidates:Candidate[]=[];
+export function extractPhotoFieldsDetailed(...texts:string[]):PhotoExtraction{
+ const text=texts.filter(Boolean).join('\n'),lineEntries=texts.flatMap(value=>{const lines=value.split(/\r?\n/).map(clean).filter(Boolean);return lines.map((line,index)=>({line,nearbyLabel:lines.slice(Math.max(0,index-3),Math.min(lines.length,index+4)).join(' ')}));}),fields=emptyPhotoFields(),candidates:Candidate[]=[],rejected:RejectedCandidate[]=[];
  const cert=labelled(text,['certification number','certificate number','cert(?:ification)?\\s*(?:no|number|#)','serial\\s*(?:no|number|#)']).match(/^[A-Za-z0-9][A-Za-z0-9 -]{2,40}/)?.[0]?.trim();
  if(cert)fields.certNumber=cert;
  const gradeText=labelled(text,['final grade','overall grade','grade']);
@@ -64,9 +67,12 @@ export function extractPhotoFields(...texts:string[]):{fields:PhotoFields;candid
   }else{
    const cardNumber=/(?:^|\s)#\s*([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)(?=\s|$)/.exec(line)?.[1];
    if(cardNumber&&plausibleCardNumber(cardNumber))candidates.push({field:'cardNumber',value:cardNumber,reason:'Possible card number; confirm against the printed label'});
+   else if(cardNumber)rejected.push({field:'cardNumber',value:cardNumber,reason:'Single-letter OCR artifact without a plausible card-number structure'});
+   const weakNumber=/^\s*(?:card\s*(?:number|no\.?|#)\s*[:#-]?\s*)([A-Za-z])\s*$/i.exec(line)?.[1];
+   if(weakNumber)rejected.push({field:'cardNumber',value:weakNumber,reason:'Single-letter value is too weak without a label pattern'});
   }
 
-  if(!fields.subject&&!numberAndName&&plausibleSubjectLine(line))candidates.push({field:'subject',value:line,reason:'Possible subject/player name from label text'});
+  if(!fields.subject&&!numberAndName&&plausibleSubjectLine(line))rejected.push({field:'subject',value:line,reason:'Subject text lacks a recognized card-number or explicit subject label context'});
   const certDigits=/^\s*(\d{8,20})\s*$/.exec(line);if(certDigits&&!fields.certNumber)candidates.push({field:'certNumber',value:certDigits[1],reason:'Possible certification number; confirm it matches the slab label'});
   const labeledGrade=new RegExp(`(?:NM\\s*[/ -]?\\s*MT|MINT|GRADE|CSG)[^\\d]{0,20}(${gradePattern})\\b`,'i').exec(line)?.[1];
   if(labeledGrade&&!fields.grade)candidates.push({field:'grade',value:labeledGrade,reason:'Possible grading-label score; confirm against the slab'});
@@ -74,8 +80,9 @@ export function extractPhotoFields(...texts:string[]):{fields:PhotoFields;candid
   if(standaloneGrade&&!fields.grade&&(/\b(?:CSG|CGC|PSA|SGC|GMA|GAS|CERTIFIED|GRADE|GRADER|GEM MINT|NM\s*[/ -]?\s*MT)\b/i.test(nearbyLabel)||standaloneGrade[1].includes('.')))candidates.push({field:'grade',value:standaloneGrade[1],reason:'Possible standalone slab grade; OCR may miss small decimal marks, so review it'});
  }
  for(const field of Object.keys(fields) as (keyof PhotoFields)[])if(fields[field])candidates.push({field,value:fields[field],reason:'OCR read this explicitly labelled value; confirm it against the slab'});
- return{fields,candidates:unique(candidates)};
+ return{fields,candidates:unique(candidates),rejected};
 }
+export function extractPhotoFields(...texts:string[]):{fields:PhotoFields;candidates:Candidate[]}{const {fields,candidates}=extractPhotoFieldsDetailed(...texts);return{fields,candidates};}
 /** Auto-fill only strong structure from a readable label crop; weak OCR remains review-only. */
 export function autoFillPhotoCandidates(candidates:Candidate[],confidence:number,hasLabelCrop:boolean):{fields:PhotoFields;used:Candidate[]}{
  const fields=emptyPhotoFields(),minimum=hasLabelCrop?68:82;

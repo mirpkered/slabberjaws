@@ -155,6 +155,7 @@ export default function Home() {
   const lookupGeneration = useRef(0);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [diagnosticsEnabled] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("diagnostics") === "1");
   const filtered = useMemo(
     () =>
       cards
@@ -797,6 +798,7 @@ export default function Home() {
             {step === "scan" && (
               <ScanEntry
                 graders={graders}
+                diagnosticsEnabled={diagnosticsEnabled}
                 initialGrader={scanReturnToManual ? draft?.grader : undefined}
                 onCancel={() => { setStep(scanReturnToManual ? "manual" : "lookup"); setScanReturnToManual(false); }}
                 onManual={(value, selected) => {
@@ -833,6 +835,7 @@ export default function Home() {
             {step === "photos" && (
               <PhotoEntry
                 graders={graders}
+                diagnosticsEnabled={diagnosticsEnabled}
                 initialGrader={draft?.grader}
                 initialFields={draft ? photoFieldsFromCard(draft) : undefined}
                 onCancel={() => { setStep(photoReturnToManual ? "manual" : "lookup"); setPhotoReturnToManual(false); }}
