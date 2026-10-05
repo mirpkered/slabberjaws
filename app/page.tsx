@@ -154,6 +154,10 @@ export default function Home() {
     [importBusy, setImportBusy] = useState(false);
   const lookupGeneration = useRef(0);
   const accountMenuRef = useRef<HTMLDivElement>(null);
+  const addOpenerRef = useRef<HTMLElement | null>(null);
+  const authOpenerRef = useRef<HTMLElement | null>(null);
+  const detailOpenerRef = useRef<HTMLElement | null>(null);
+  const dialogCloseHandlers = useRef({ add: () => {}, auth: () => {}, detail: () => {} });
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [diagnosticsEnabled] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("diagnostics") === "1");
   const filtered = useMemo(
@@ -232,6 +236,7 @@ export default function Home() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === "PASSWORD_RECOVERY") {
+        rememberDialogOpener(authOpenerRef);
         setAuthMode("reset");
         setAuthOpen(true);
         setAuthMessage("");
@@ -247,7 +252,10 @@ export default function Home() {
   useEffect(() => {
     if (!accountMenuOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAccountMenuOpen(false);
+      if (event.key === "Escape") {
+        setAccountMenuOpen(false);
+        accountMenuRef.current?.querySelector<HTMLElement>(".account-menu-toggle")?.focus({ preventScroll: true });
+      }
     };
     const onPointerDown = (event: PointerEvent) => {
       if (!accountMenuRef.current?.contains(event.target as Node)) setAccountMenuOpen(false);
@@ -259,6 +267,33 @@ export default function Home() {
       document.removeEventListener("pointerdown", onPointerDown);
     };
   }, [accountMenuOpen]);
+
+  function rememberDialogOpener(target: React.MutableRefObject<HTMLElement | null>) {
+    target.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  function blurDialogTextControl(selector: string) {
+    const dialog = document.querySelector(selector);
+    const active = document.activeElement;
+    if (dialog?.contains(active) && active instanceof HTMLElement && active.matches(
+      'input:not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]',
+    )) active.blur();
+  }
+  function restoreDialogFocus(target: React.MutableRefObject<HTMLElement | null>, fallbackSelector: string) {
+    const opener = target.current;
+    target.current = null;
+    requestAnimationFrame(() => {
+      const fallback = [...document.querySelectorAll<HTMLElement>(fallbackSelector)].find(
+        (element) => element.getClientRects().length > 0,
+      );
+      const next = opener?.isConnected && opener.getClientRects().length > 0 ? opener : fallback;
+      if (next?.isConnected) next.focus({ preventScroll: true });
+    });
+  }
+  function closeAuth() {
+    blurDialogTextControl(".auth-modal");
+    setAuthOpen(false);
+    restoreDialogFocus(authOpenerRef, ".account-menu-toggle");
+  }
 
   function resetAddSession() {
     lookupGeneration.current += 1;
@@ -274,7 +309,9 @@ export default function Home() {
     setLookupMessage("");
     setNotice("");
   }
-  function openAddCard() {
+  function openAddCard(trigger?: HTMLElement) {
+    if (trigger) addOpenerRef.current = trigger;
+    else rememberDialogOpener(addOpenerRef);
     resetAddSession();
     setAddSessionId((id) => id + 1);
     setAddOpen(true);
@@ -318,6 +355,7 @@ export default function Home() {
             throw new Error(
               "A supported grader and certification number are required.",
             );
+          rememberDialogOpener(addOpenerRef);
           resetAddSession();
           setLookupGrader(value.grader as Grader);
           setCert(value.certNumber.trim());
@@ -363,8 +401,11 @@ export default function Home() {
             c.certNumber.replace(/\s/g, "") ===
               requestedCert.trim().replace(/\s/g, ""),
         );
-        if (duplicate) setDetail(duplicate);
-        setAddOpen(false);
+        if (duplicate) {
+          detailOpenerRef.current = addOpenerRef.current;
+          setDetail(duplicate);
+        }
+        closeAdd(!duplicate);
         setNotice("This slab is already in your collection.");
         return;
       }
@@ -402,10 +443,57 @@ export default function Home() {
     }
     if (generation === lookupGeneration.current) setLooking(false);
   }
-  function closeAdd() {
+  function closeAdd(restoreFocus = true) {
+    blurDialogTextControl(".add-modal");
     setAddOpen(false);
     resetAddSession();
+    if (restoreFocus) restoreDialogFocus(addOpenerRef, ".desktop-add, .floating-add");
   }
+  function closeDetail() {
+    blurDialogTextControl(".detail-modal");
+    setDetail(null);
+    restoreDialogFocus(detailOpenerRef, ".desktop-add, .floating-add");
+  }
+  dialogCloseHandlers.current = { add: closeAdd, auth: closeAuth, detail: closeDetail };
+
+  useEffect(() => {
+    if (!authOpen && !addOpen && !detail) return;
+    const selector = addOpen ? ".add-modal" : authOpen ? ".auth-modal" : ".detail-modal";
+    const dialog = document.querySelector<HTMLElement>(selector);
+    if (!dialog) return;
+    const focusables = () => [...dialog.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => element.getClientRects().length > 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (addOpen) dialogCloseHandlers.current.add();
+        else if (authOpen) dialogCloseHandlers.current.auth();
+        else if (detail) dialogCloseHandlers.current.detail();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const focusFrame = requestAnimationFrame(() => dialog.querySelector<HTMLElement>(".close")?.focus({ preventScroll: true }));
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [authOpen, addOpen, detail]);
   function beginManual() {
     const created={...createManualCard(lookupGrader, cert),certUrl:generalVerificationUrl(lookupGrader)};
     const merged=mergeCardEvidence(draft??created,evidenceSources,created,sourceCard(created,"manual"));
@@ -436,8 +524,7 @@ export default function Home() {
     try {
       await repository.addCard(draft);
       setCards(await repository.getCards());
-      setAddOpen(false);
-      resetAddSession();
+      closeAdd();
       setNotice("Card added to your collection.");
     } catch (error) {
       setNotice(
@@ -471,7 +558,7 @@ export default function Home() {
           password,
         });
         if (error) throw error;
-        setAuthOpen(false);
+        closeAuth();
       } else if (authMode === "signup") {
         if (password !== passwordConfirm)
           throw new Error("Passwords do not match.");
@@ -481,7 +568,7 @@ export default function Home() {
           options: { emailRedirectTo: authRedirectUrl() },
         });
         if (error) throw error;
-        if (data.session) setAuthOpen(false);
+        if (data.session) closeAuth();
         else
           setAuthMessage(
             "Check your email to confirm your account, then sign in.",
@@ -553,7 +640,7 @@ export default function Home() {
         <div className="header-actions">
           <button
             className="primary desktop-add"
-            onClick={openAddCard}
+            onClick={(event) => openAddCard(event.currentTarget)}
           >
             <Plus /> Add card
           </button>
@@ -562,7 +649,7 @@ export default function Home() {
               <Menu aria-hidden="true" />
             </button>
             {accountMenuOpen && <div className="account-menu-panel" id="account-menu-panel" aria-label="Account actions">
-              {session ? <><p className="account-menu-identity"><UserRound aria-hidden="true" />{session.user.email}</p><button className="account-button" onClick={() => { setAccountMenuOpen(false); void signOut(); }}><LogOut aria-hidden="true" /> Sign out</button></> : <button className="account-button" onClick={() => { setAccountMenuOpen(false); setAuthOpen(true); }}><LogIn aria-hidden="true" /> Account</button>}
+              {session ? <><p className="account-menu-identity"><UserRound aria-hidden="true" />{session.user.email}</p><button className="account-button" onClick={() => { setAccountMenuOpen(false); void signOut(); }}><LogOut aria-hidden="true" /> Sign out</button></> : <button className="account-button" onClick={(event) => { authOpenerRef.current = accountMenuRef.current?.querySelector(".account-menu-toggle") ?? event.currentTarget; setAccountMenuOpen(false); setAuthOpen(true); }}><LogIn aria-hidden="true" /> Account</button>}
             </div>}
           </div>
         </div>
@@ -676,7 +763,10 @@ export default function Home() {
                 <button
                   className="slab-card"
                   key={card.id}
-                  onClick={() => setDetail(card)}
+                  onClick={(event) => {
+                    detailOpenerRef.current = event.currentTarget;
+                    setDetail(card);
+                  }}
                 >
                   <div className="card-art">
                     <CardImage card={card} />
@@ -717,22 +807,22 @@ export default function Home() {
             </div>
           ))}
       </section>
-      <button className="floating-add" onClick={openAddCard}>
+      <button className="floating-add" onClick={(event) => openAddCard(event.currentTarget)}>
         <Plus /> Add card
       </button>
       {authOpen && (
         <div
           className="modal-backdrop"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setAuthOpen(false);
+            if (e.target === e.currentTarget) closeAuth();
           }}
         >
-          <section className="modal auth-modal">
-            <button className="close" onClick={() => setAuthOpen(false)}>
+          <section className="modal auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title">
+            <button className="close" aria-label="Close account dialog" onClick={closeAuth}>
               <X />
             </button>
             <p className="eyebrow">SLABBERJAWS ACCOUNT</p>
-            <h2>
+            <h2 id="auth-dialog-title">
               {authMode === "signin" ? "Sign in" : authMode === "signup" ? "Create account" : authMode === "forgot" ? "Reset password" : "Set a new password"}
             </h2>
             <p className="muted">
@@ -763,7 +853,7 @@ export default function Home() {
             </form>
             {authMode === "forgot" && <button type="button" className="text-button" onClick={() => switchAuthMode("signin")}>Back to Sign In</button>}
             {authMode === "reset" && <button type="button" className="text-button" onClick={() => switchAuthMode("forgot")}>Request another reset email</button>}
-            {authMode !== "reset" && <button type="button" className="text-button" onClick={() => setAuthOpen(false)}>Continue on This Device</button>}
+            {authMode !== "reset" && <button type="button" className="text-button" onClick={closeAuth}>Continue on This Device</button>}
             {!isSupabaseConfigured && (
               <p className="configuration-note">
                 Cloud accounts are unavailable until Supabase is configured.
@@ -779,12 +869,12 @@ export default function Home() {
             if (e.target === e.currentTarget) closeAdd();
           }}
         >
-          <section className="modal add-modal" key={addSessionId}>
-            <button className="close" onClick={closeAdd}>
+          <section className="modal add-modal" key={addSessionId} role="dialog" aria-modal="true" aria-labelledby="add-dialog-title">
+            <button className="close" aria-label="Close Add Card dialog" onClick={() => closeAdd()}>
               <X />
             </button>
             <p className="eyebrow">NEW SLAB</p>
-            <h2>
+            <h2 id="add-dialog-title">
               {step === "manual"
                 ? "Enter card details"
                 : step === "preview"
@@ -1006,8 +1096,8 @@ export default function Home() {
       )}
       {detail && (
         <div className="modal-backdrop">
-          <section className="modal detail-modal">
-            <button className="close" onClick={() => setDetail(null)}>
+          <section className="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-dialog-title">
+            <button className="close" aria-label="Close card details dialog" onClick={closeDetail}>
               <X />
             </button>
             <div className="detail-image">
@@ -1015,7 +1105,7 @@ export default function Home() {
             </div>
             <div className="detail-copy">
               <span className="grader-pill">{detail.grader}</span>
-              <h2>{detail.subject}</h2>
+              <h2 id="detail-dialog-title">{detail.subject}</h2>
               <p>
                 {detail.year} {detail.brand} · {detail.set} {detail.cardNumber}
               </p>

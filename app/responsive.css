@@ -98,6 +98,19 @@
 .import-banner {
   overflow-wrap: anywhere;
 }
+
+/* Keep every keyboard-editable control at iOS's no-auto-zoom threshold on
+   narrow phones and compact phone landscape layouts. Preserve larger authored
+   sizes while preventing inherited small field-label typography from leaking
+   into controls. */
+@media (max-width: 640px), (max-height: 500px) {
+  :root { --mobile-text-entry-size: 16px; }
+  input:not([type="range"]):not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),
+  textarea,
+  select {
+    font-size: max(var(--mobile-text-entry-size), 1em);
+  }
+}
 .detail-copy dl div {
   gap: 12px;
 }
