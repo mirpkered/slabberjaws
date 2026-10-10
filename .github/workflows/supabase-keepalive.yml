@@ -1,0 +1,87 @@
+name: Supabase database keepalive
+
+on:
+  schedule:
+    # Cron cannot express a strict rolling 72-hour interval. This runs on
+    # day-of-month steps of three; GitHub may delay scheduled workflows.
+    - cron: "23 7 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-database-keepalive
+  cancel-in-progress: false
+
+jobs:
+  database-read:
+    name: Read-only PostgreSQL health query
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate restricted Slabberjaws database connection
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_KEEPALIVE_DB_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${DATABASE_URL:-}" ]]; then
+            echo "::error::Repository secret SUPABASE_KEEPALIVE_DB_URL is not configured."
+            exit 1
+          fi
+
+          node <<'NODE'
+          const value = process.env.DATABASE_URL;
+          let url;
+          try {
+            url = new URL(value);
+          } catch {
+            throw new Error('SUPABASE_KEEPALIVE_DB_URL must be a valid PostgreSQL connection URI.');
+          }
+
+          const projectRef = 'kewynepvspcmrujustds';
+          const directHost = `db.${projectRef}.supabase.co`;
+          const username = decodeURIComponent(url.username);
+          const direct = url.hostname === directHost && username === 'slabberjaws_keepalive';
+          const sessionPooler = url.hostname.endsWith('.pooler.supabase.com')
+            && username === `slabberjaws_keepalive.${projectRef}`;
+
+          if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+            throw new Error('Connection URI must use PostgreSQL.');
+          }
+          if (!direct && !sessionPooler) {
+            throw new Error('Connection URI must target the Slabberjaws project using the restricted slabberjaws_keepalive role.');
+          }
+          if (url.pathname !== '/postgres' || !url.password) {
+            throw new Error('Connection URI must include the postgres database and role password.');
+          }
+          if (sessionPooler && url.port !== '5432') {
+            throw new Error('Use the Supabase session pooler endpoint on port 5432.');
+          }
+          console.log('Connection target and least-privilege role validated (credential omitted).');
+          NODE
+
+      - name: Run and verify read-only database query
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_KEEPALIVE_DB_URL }}
+          PGCONNECT_TIMEOUT: "15"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "::error::PostgreSQL client (psql) is unavailable on this runner."
+            exit 1
+          fi
+
+          if ! result="$(psql --no-psqlrc --set=ON_ERROR_STOP=1 --no-align --tuples-only --quiet \
+            --dbname "$DATABASE_URL" --command 'SELECT 1;')"; then
+            echo "::error::Read-only Supabase PostgreSQL query failed. Check connection, authentication, and query errors above; the credential is not printed."
+            exit 1
+          fi
+
+          if [[ "$result" != "1" ]]; then
+            echo "::error::PostgreSQL connection returned an unexpected result; SELECT 1 was not verified."
+            exit 1
+          fi
+          echo "Verified a successful read-only SELECT 1 on the Slabberjaws Supabase database. No card rows were read or changed."
