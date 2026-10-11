@@ -33,6 +33,7 @@ import { PhotoEntry } from "../photo/PhotoEntry";
 import type { PhotoFields, PhotoFieldSources } from "../photo/extract";
 import { mergeCardEvidence, photoEvidence, sourceCard, type CardEvidenceSources, type EvidenceConflict } from "../photo/evidence";
 import { certificationLinkLabel, generalVerificationUrl, graders, hasAutomaticLookup } from "../graders/registry";
+import { getContactEmailHref } from "../lib/contact";
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
@@ -810,6 +811,9 @@ export default function Home() {
       <button className="floating-add" onClick={(event) => openAddCard(event.currentTarget)}>
         <Plus /> Add card
       </button>
+      <footer className="site-footer">
+        <a href={getContactEmailHref()}>Contact / feedback</a>
+      </footer>
       {authOpen && (
         <div
           className="modal-backdrop"

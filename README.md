@@ -1,5 +1,12 @@
 # vinext-starter
 
+## Mirpworks Contact Convention
+
+Application feedback uses `contact@mirpworks.com`. The subject is
+`Slabberjaws — Feedback`, and the message begins with `Sent from: Slabberjaws`.
+The Contact / feedback link prefills this information in the user's email app;
+the user supplies and sends the message.
+
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
 
 ## Prerequisites

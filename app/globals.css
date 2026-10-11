@@ -16,6 +16,22 @@
 .floating-add {
   color: var(--accent-ink);
 }
+.site-footer {
+  padding: 18px clamp(18px, 5vw, 72px) calc(24px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  color: var(--text-muted);
+  font-size: .85rem;
+}
+.site-footer a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.site-footer a:hover {
+  color: var(--accent-highlight);
+}
 :root {
   color-scheme: dark;
   --bg: #17191c;
