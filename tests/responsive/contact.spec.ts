@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('contact link opens a prefilled Slabberjaws feedback email', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   const contact = page.getByRole('link', { name: 'Contact / feedback' });
   await expect(contact).toHaveAttribute('href', /^mailto:contact@mirpworks\.com\?/);
   const href = await contact.getAttribute('href');
