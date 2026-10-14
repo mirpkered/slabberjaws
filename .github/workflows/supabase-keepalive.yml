@@ -20,47 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Check out keepalive validator
+        uses: actions/checkout@v4
+
       - name: Validate restricted Slabberjaws database connection
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_KEEPALIVE_DB_URL }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "${DATABASE_URL:-}" ]]; then
-            echo "::error::Repository secret SUPABASE_KEEPALIVE_DB_URL is not configured."
-            exit 1
-          fi
-
-          node <<'NODE'
-          const value = process.env.DATABASE_URL;
-          let url;
-          try {
-            url = new URL(value);
-          } catch {
-            throw new Error('SUPABASE_KEEPALIVE_DB_URL must be a valid PostgreSQL connection URI.');
-          }
-
-          const projectRef = 'kewynepvspcmrujustds';
-          const directHost = `db.${projectRef}.supabase.co`;
-          const username = decodeURIComponent(url.username);
-          const direct = url.hostname === directHost && username === 'slabberjaws_keepalive';
-          const sessionPooler = url.hostname.endsWith('.pooler.supabase.com')
-            && username === `slabberjaws_keepalive.${projectRef}`;
-
-          if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
-            throw new Error('Connection URI must use PostgreSQL.');
-          }
-          if (!direct && !sessionPooler) {
-            throw new Error('Connection URI must target the Slabberjaws project using the restricted slabberjaws_keepalive role.');
-          }
-          if (url.pathname !== '/postgres' || !url.password) {
-            throw new Error('Connection URI must include the postgres database and role password.');
-          }
-          if (sessionPooler && url.port !== '5432') {
-            throw new Error('Use the Supabase session pooler endpoint on port 5432.');
-          }
-          console.log('Connection target and least-privilege role validated (credential omitted).');
-          NODE
+          node scripts/validate-supabase-keepalive-uri.mjs
 
       - name: Run and verify read-only database query
         env:
@@ -85,3 +54,4 @@ jobs:
             exit 1
           fi
           echo "Verified a successful read-only SELECT 1 on the Slabberjaws Supabase database. No card rows were read or changed."
+
