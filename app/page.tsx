@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive,
@@ -34,6 +34,7 @@ import type { PhotoFields, PhotoFieldSources } from "../photo/extract";
 import { mergeCardEvidence, photoEvidence, sourceCard, type CardEvidenceSources, type EvidenceConflict } from "../photo/evidence";
 import { certificationLinkLabel, generalVerificationUrl, graders, hasAutomaticLookup } from "../graders/registry";
 import { getContactEmailHref } from "../lib/contact";
+import { getDiagnosticsServerSnapshot, getDiagnosticsSnapshot, persistDiagnosticsUrlActivation, setDiagnosticsPreference, subscribeDiagnosticsPreference } from "../lib/diagnostics-preference";
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
@@ -160,7 +161,7 @@ export default function Home() {
   const detailOpenerRef = useRef<HTMLElement | null>(null);
   const dialogCloseHandlers = useRef({ add: () => {}, auth: () => {}, detail: () => {} });
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [diagnosticsEnabled] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("diagnostics") === "1");
+  const diagnosticsEnabled = useSyncExternalStore(subscribeDiagnosticsPreference, getDiagnosticsSnapshot, getDiagnosticsServerSnapshot);
   const filtered = useMemo(
     () =>
       cards
@@ -249,6 +250,14 @@ export default function Home() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    persistDiagnosticsUrlActivation();
+  }, []);
+
+  function updateDiagnosticsPreference(enabled: boolean) {
+    setDiagnosticsPreference(enabled);
+  }
 
   useEffect(() => {
     if (!accountMenuOpen) return;
@@ -650,6 +659,9 @@ export default function Home() {
               <Menu aria-hidden="true" />
             </button>
             {accountMenuOpen && <div className="account-menu-panel" id="account-menu-panel" aria-label="Account actions">
+              <button type="button" className="account-button diagnostics-toggle" role="switch" aria-label="Diagnostics" aria-checked={diagnosticsEnabled} onClick={() => updateDiagnosticsPreference(!diagnosticsEnabled)}>
+                <span>Diagnostics</span><span className="diagnostics-toggle-state">{diagnosticsEnabled ? "On" : "Off"}</span>
+              </button>
               {session ? <><p className="account-menu-identity"><UserRound aria-hidden="true" />{session.user.email}</p><button className="account-button" onClick={() => { setAccountMenuOpen(false); void signOut(); }}><LogOut aria-hidden="true" /> Sign out</button></> : <button className="account-button" onClick={(event) => { authOpenerRef.current = accountMenuRef.current?.querySelector(".account-menu-toggle") ?? event.currentTarget; setAccountMenuOpen(false); setAuthOpen(true); }}><LogIn aria-hidden="true" /> Account</button>}
             </div>}
           </div>
@@ -878,6 +890,7 @@ export default function Home() {
               <X />
             </button>
             <p className="eyebrow">NEW SLAB</p>
+            {diagnosticsEnabled && <p className="diagnostics-active" role="status">Diagnostics Active</p>}
             <h2 id="add-dialog-title">
               {step === "manual"
                 ? "Enter card details"
@@ -1158,3 +1171,4 @@ export default function Home() {
     </main>
   );
 }
+

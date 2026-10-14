@@ -40,8 +40,12 @@
 .account-menu-toggle:focus-visible { outline: 3px solid var(--accent-highlight); outline-offset: 2px; }
 .account-menu-panel { position: absolute; z-index: 80; top: calc(100% + 8px); right: 0; width: min(300px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 16px 40px #0009; }
 .account-menu-panel .account-button { width: 100%; min-height: 48px; justify-content: flex-start; padding: 12px; font-size: .85rem; }
+.account-menu-panel .diagnostics-toggle { justify-content: space-between; text-transform: none; letter-spacing: .02em; }
+.diagnostics-toggle-state { min-width: 42px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; text-align: center; color: var(--text-muted); }
+.diagnostics-toggle[aria-checked="true"] .diagnostics-toggle-state { border-color: var(--accent); color: var(--text); background: #28a8e826; }
 .account-menu-identity { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 4px; overflow-wrap: anywhere; font-size: .875rem; }
 .account-menu-identity svg { flex: 0 0 18px; }
+.account-menu-panel .diagnostics-toggle { font-size: .85rem; }
 .primary,
 .text-button,
 .account-button {
@@ -372,3 +376,4 @@
     min-height: 48px;
   }
 }
+

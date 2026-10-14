@@ -727,6 +727,7 @@ a:focus-visible {
 }
 
 .scan-payload-diagnostics, .ocr-diagnostics { min-width: 0; max-width: 100%; margin: 1rem 0; padding: .85rem; border: 1px solid var(--border); border-radius: .7rem; background: var(--surface-raised); color: var(--text); overflow-wrap: anywhere; }
+.diagnostics-active { display: inline-flex; align-items: center; min-height: 28px; margin: 0 0 .8rem; padding: .25rem .65rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--text); background: #28a8e826; font-size: .72rem; font-weight: 800; letter-spacing: .04em; }
 .scan-payload-diagnostics summary, .ocr-diagnostics summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 .scan-payload-diagnostics dl { margin: .6rem 0 0; display: grid; gap: .35rem; }
 .scan-payload-diagnostics dt { color: var(--text-muted); font-size: .8rem; }
@@ -968,3 +969,4 @@ a:focus-visible {
   .photo-candidates > div { grid-template-columns: minmax(0,1fr) auto; }
   .photo-candidates .text-button { grid-column: 2; }
 }
+
