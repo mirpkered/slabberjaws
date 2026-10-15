@@ -19,7 +19,8 @@ test('Diagnostics defaults off; hamburger switch enables it and persists across 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-checked', 'true');
   await openAdd(page);
-  await expect(page.locator('.diagnostics-active')).toHaveText('Diagnostics Active');
+  await expect(page.locator('.diagnostics-active')).toContainText('Diagnostics Active · build');
+  await expect(page.locator('.diagnostics-active')).toHaveAttribute('data-build-id', /.+/);
   await page.locator('.add-modal .close').click();
 
   await page.reload({ waitUntil: 'networkidle' });

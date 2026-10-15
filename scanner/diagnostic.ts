@@ -21,6 +21,7 @@ export function scanDiagnostic(raw: string, format: string, selectedGrader = '',
     classification.kind === 'grader-certification-url' ? classification.gradeCandidate ?? '' : '', classification);
   return {
     source: scanSourceLabel(raw, format),
+    classification: classification.kind,
     raw,
     grader: selectedGrader,
     suggestedGrader: 'suggestedGrader' in classification ? classification.suggestedGrader : '',
@@ -36,3 +37,4 @@ export function scanDiagnostic(raw: string, format: string, selectedGrader = '',
     } : handoff?.kind === 'lookup' ? { grader: handoff.grader, cert: handoff.certNumber, grade: '', verificationUrl: '', route: 'Supported certification lookup' } : null,
   };
 }
+

@@ -139,6 +139,39 @@ test('exact slashless CSG QR retains grade and URL through diagnostics, selectio
   await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('9.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
 });
 
+test('scan-first exact CSG QR has parsed evidence before grader selection and applies it after confirmation',async({page})=>{
+  await cameraMock(page);await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+  await openAdd(page);await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,csg,'qr_code');
+  const diagnostic=page.locator('.scan-payload-diagnostics');
+  await expect(page.getByLabel('Grading company')).toHaveValue('');
+  await expect(diagnostic).toContainText('Payload classificationgrader-certification-url');
+  await expect(diagnostic).toContainText('Normalized graderNot selected');
+  await expect(diagnostic).toContainText('Suggested graderCSG');
+  await expect(diagnostic).toContainText('Normalized cert1012833027');
+  await expect(diagnostic).toContainText('Normalized grade8.5');
+  await expect(diagnostic).toContainText(`Verification URL${csg}`);
+  await expect(diagnostic).toContainText('Not applied yet');
+  await page.getByLabel('Grading company').selectOption('CSG');
+  await expect(diagnostic).toContainText('Evidence to apply on continueManual card details: CSG · cert 1012833027 · grade 8.5');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+  await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+});
+
+test('grader selected on Add Card before scanning is carried into the scanner confirmation',async({page})=>{
+  await cameraMock(page);await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+  await openAdd(page);await page.getByLabel('Grading company').selectOption('CSG');
+  await page.getByRole('button',{name:'Scan Slab',exact:true}).click();await state(page,csg,'qr_code');
+  await expect(page.getByLabel('Grading company')).toHaveValue('CSG');
+  await expect(page.locator('.scan-payload-diagnostics')).toContainText('Normalized grade8.5');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+  await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+});
+
 test('CSG scan evidence stays in the same Add Card session while adding slab photos',async({page})=>{
   await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});
   const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';
@@ -161,3 +194,4 @@ test('Degree scan keeps its supported cert lookup route and leading zeroes',asyn
   await expect(page.locator('.lookup-preview')).toBeVisible();await expect(page.locator('.lookup-preview code')).toHaveText('00409451');
   if(requestBody){expect(JSON.parse(requestBody)).toMatchObject({grader:'degree',certNumber:'00409451'});}else{expect(requestUrl).toContain('Degree/00409451');}
 });
+

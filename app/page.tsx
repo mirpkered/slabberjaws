@@ -38,6 +38,7 @@ import { getDiagnosticsServerSnapshot, getDiagnosticsSnapshot, persistDiagnostic
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
+const buildId = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_BUILD_ID ?? "local-unversioned";
 const seed: Card[] = [
   {
     id: "demo-1",
@@ -130,6 +131,7 @@ export default function Home() {
       "lookup" | "failed" | "manual" | "preview" | "scan" | "photos"
     >("lookup"),
     [lookupGrader, setLookupGrader] = useState<Grader>("Degree"),
+    [lookupGraderExplicit, setLookupGraderExplicit] = useState(false),
     [cert, setCert] = useState(""),
     [draft, setDraft] = useState<Card | null>(null),
     [evidenceSources, setEvidenceSources] = useState<CardEvidenceSources>({}),
@@ -310,6 +312,7 @@ export default function Home() {
     setLooking(false);
     setStep("lookup");
     setLookupGrader("Degree");
+    setLookupGraderExplicit(false);
     setCert("");
     setDraft(null);
     setEvidenceSources({});
@@ -368,6 +371,7 @@ export default function Home() {
           rememberDialogOpener(addOpenerRef);
           resetAddSession();
           setLookupGrader(value.grader as Grader);
+          setLookupGraderExplicit(true);
           setCert(value.certNumber.trim());
           setStep("lookup");
           setAddSessionId((id) => id + 1);
@@ -390,6 +394,7 @@ export default function Home() {
     const requestedCert = input?.certNumber ?? cert;
     if (input) {
       setLookupGrader(input.grader);
+      setLookupGraderExplicit(true);
       setCert(input.certNumber);
     }
     setNotice("");
@@ -890,7 +895,7 @@ export default function Home() {
               <X />
             </button>
             <p className="eyebrow">NEW SLAB</p>
-            {diagnosticsEnabled && <p className="diagnostics-active" role="status">Diagnostics Active</p>}
+            {diagnosticsEnabled && <p className="diagnostics-active" data-build-id={buildId} role="status">Diagnostics Active · build {buildId.slice(0, 12)}</p>}
             <h2 id="add-dialog-title">
               {step === "manual"
                 ? "Enter card details"
@@ -906,11 +911,11 @@ export default function Home() {
               <ScanEntry
                 graders={graders}
                 diagnosticsEnabled={diagnosticsEnabled}
-                initialGrader={scanReturnToManual ? draft?.grader : undefined}
+                initialGrader={scanReturnToManual ? draft?.grader : lookupGraderExplicit ? lookupGrader : undefined}
                 onCancel={() => { setStep(scanReturnToManual ? "manual" : "lookup"); setScanReturnToManual(false); }}
                 onManual={(value, selected) => {
                   if (value) setCert(value);
-                  if (selected) setLookupGrader(selected);
+                  if (selected) { setLookupGrader(selected); setLookupGraderExplicit(true); }
                   if(scanReturnToManual&&draft){
                     const patch:Partial<Card>={...(value?{certNumber:value}:{}),...(selected?{grader:selected}:{})};
                     const sources:CardEvidenceSources={...(value?{certNumber:"manual" as const}:{}),...(selected?{grader:"manual" as const}:{})};
@@ -926,6 +931,7 @@ export default function Home() {
                   const incomingSources:CardEvidenceSources={grader:"manual",certNumber:"scan",...(extra?.certUrl?{certUrl:"scan" as const}:{}),...(extra?.grade?{grade:"scan" as const}:{})};
                   const merged=mergeCardEvidence(base,draft?evidenceSources:{},incoming,incomingSources);
                   setLookupGrader(selected);
+                  setLookupGraderExplicit(true);
                   setCert(merged.card.certNumber);
                   setDraft(merged.card);
                   setEvidenceSources(merged.sources);
@@ -951,6 +957,7 @@ export default function Home() {
                   const photo=photoEvidence(fields,selected,fieldSources);
                   const merged=mergeCardEvidence(base,draft?evidenceSources:{},photo.patch,photo.sources);
                   setLookupGrader(selected);
+                  setLookupGraderExplicit(true);
                   setCert(merged.card.certNumber);
                   setDraft(merged.card);
                   setEvidenceSources(merged.sources);
@@ -991,7 +998,7 @@ export default function Home() {
                   Grading company
                   <select
                     value={lookupGrader}
-                    onChange={(e) => setLookupGrader(e.target.value as Grader)}
+                    onChange={(e) => { setLookupGrader(e.target.value as Grader); setLookupGraderExplicit(true); }}
                   >
                     {graders.map((g) => (
                       <option key={g}>{g}</option>
@@ -1182,3 +1189,4 @@ export default function Home() {
     </main>
   );
 }
+
