@@ -6,10 +6,16 @@ import { emptyPhotoFields, extractPhotoFields } from '../photo/extract.ts';
 import { confirmedScanHandoff } from '../scanner/handoff.ts';
 
 test('CSG scan evidence retains its cert, editable QR grade and complete verification URL',()=>{
- const url='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';
+ const url='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
  const handoff=confirmedScanHandoff(url,'CSG','1012833027','8.5');assert.deepEqual(handoff,{kind:'manual',grader:'CSG',certNumber:'1012833027',certUrl:url,grade:'8.5'});
  const base=createManualCard('CSG','1012833027');const merged=mergeCardEvidence(base,{}, {grader:'CSG',certNumber:'1012833027',grade:'8.5',certUrl:url},{grader:'manual',certNumber:'scan',grade:'scan',certUrl:'scan'});
  assert.equal(merged.card.grader,'CSG');assert.equal(merged.card.certNumber,'1012833027');assert.equal(merged.card.grade,'8.5');assert.equal(merged.card.certUrl,url);
+});
+
+test('CSG-hosted QR data is preserved when the user explicitly chooses a different grader',()=>{
+ const url='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+ const handoff=confirmedScanHandoff(url,'CGC','1012833027','8.5');
+ assert.deepEqual(handoff,{kind:'manual',grader:'CGC',certNumber:'1012833027',certUrl:url,grade:'8.5'});
 });
 
 test('C3G scanner evidence preserves cert URL and does not fabricate a grade',()=>{

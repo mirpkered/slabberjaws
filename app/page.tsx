@@ -1070,6 +1070,17 @@ export default function Home() {
                   <span>{draft.grader}</span>
                   <code>{draft.certNumber}</code>
                 </div>
+                {diagnosticsEnabled && (evidenceSources.certNumber === "scan" || evidenceSources.grade === "scan" || evidenceSources.certUrl === "scan") && (
+                  <details className="scan-payload-diagnostics" open>
+                    <summary>Scan evidence applied to Add Card</summary>
+                    <dl>
+                      <dt>Selected grader</dt><dd>{draft.grader}</dd>
+                      {evidenceSources.certNumber === "scan" && <><dt>Certification number</dt><dd>{draft.certNumber}</dd></>}
+                      {evidenceSources.grade === "scan" && <><dt>Grade candidate</dt><dd>{draft.grade}</dd></>}
+                      {evidenceSources.certUrl === "scan" && <><dt>Verification URL</dt><dd><code>{draft.certUrl}</code></dd></>}
+                    </dl>
+                  </details>
+                )}
                 <div className="manual-identification-actions">
                   <button className="account-button wide" onClick={() => { setPhotoReturnToManual(true); setStep("photos"); }}>Photograph slab to fill details</button>
                   <button className="account-button wide" onClick={() => { setScanReturnToManual(true); setStep("scan"); }}>Scan slab to add or confirm certification</button>
@@ -1171,4 +1182,3 @@ export default function Home() {
     </main>
   );
 }
-

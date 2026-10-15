@@ -1,5 +1,5 @@
 import { hasAutomaticLookup } from "../graders/registry.ts";
-import { classifyScanPayload } from "./payload-classification.ts";
+import { classifyScanPayload, type PayloadClassification } from "./payload-classification.ts";
 import type { NormalizedCard } from "../graders/model.ts";
 
 type Grader = NormalizedCard["grader"];
@@ -16,16 +16,19 @@ export function certAfterGraderSelection(selected: Grader | "", currentCert: str
 }
 
 /** Shared decision point: a readable identifier never implies that the cert was authenticated. */
-export function confirmedScanHandoff(rawPayload: string, grader: Grader | "", certNumber: string, gradeCandidate = ""): ConfirmedScanHandoff | null {
+export function confirmedScanHandoff(rawPayload: string, grader: Grader | "", certNumber: string, gradeCandidate = "", acceptedClassification?: PayloadClassification): ConfirmedScanHandoff | null {
   const cert = certNumber.trim();
   if (!grader || !cert) return null;
-  const classification = classifyScanPayload(rawPayload);
+  const classification = acceptedClassification ?? classifyScanPayload(rawPayload);
   if (classification.kind === "grader-certification-url") {
     return {
       kind: "manual",
       grader,
       certNumber: cert,
-      ...(grader === classification.suggestedGrader ? { certUrl: classification.certUrl, ...(gradeCandidate.trim() ? { grade: gradeCandidate.trim() } : {}) } : {}),
+      // URL, cert, and grade are evidence encoded by the QR, independent of
+      // the user's grader choice. The user-selected grader remains authoritative.
+      certUrl: classification.certUrl,
+      ...(gradeCandidate.trim() ? { grade: gradeCandidate.trim() } : {}),
     };
   }
   return hasAutomaticLookup(grader)

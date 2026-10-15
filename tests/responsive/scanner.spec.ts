@@ -120,6 +120,25 @@ test('CSG and C3G QR URLs reach card details intact without any lookup request',
   await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await expect(page.getByLabel('Certification number')).toHaveValue('');await expect(page.getByLabel('Grading company')).toHaveValue('Degree');
 });
 
+test('exact slashless CSG QR retains grade and URL through diagnostics, selection, and manual edits',async({page})=>{
+  await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+  // Start with a CSG card already in the same Add Card session, then scan.
+  await openAdd(page);await page.getByLabel('Grading company').selectOption('CSG');await page.getByLabel('Certification number').fill('1012833027');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await page.getByRole('button',{name:'Scan slab to add or confirm certification'}).click();await state(page,csg);
+  await expect(page.getByLabel('Grading company')).toHaveValue('CSG');
+  const diagnostic=page.locator('.scan-payload-diagnostics');
+  await expect(diagnostic).toContainText('QR URL');await expect(diagnostic).toContainText('Normalized grade8.5');await expect(diagnostic).toContainText(csg);
+  await expect(diagnostic).toContainText('Evidence to apply on continueManual card details: CSG · cert 1012833027 · grade 8.5');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+  const applied=page.getByText('Scan evidence applied to Add Card').locator('..');await expect(applied).toContainText('1012833027');await expect(applied).toContainText('8.5');await expect(applied).toContainText(csg);
+  await page.locator('.manual-grid').getByLabel('Grade').fill('9.5');
+  await page.getByRole('button',{name:'Scan slab to add or confirm certification'}).click();await state(page,csg);await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('9.5');await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+});
+
 test('CSG scan evidence stays in the same Add Card session while adding slab photos',async({page})=>{
   await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});
   const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5/';
