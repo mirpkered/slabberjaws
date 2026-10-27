@@ -15,7 +15,7 @@ const validator = readFileSync(
 );
 
 test("Supabase keepalive is scheduled, manually runnable, and read-only", () => {
-  assert.match(workflow, /cron:\s*["']23 7 \*\/3 \* \*["']/);
+  assert.match(workflow, /cron:\s*["']23 7 \* \* \*["']/);
   assert.match(workflow, /^\s+workflow_dispatch:\s*$/m);
   assert.match(workflow, /contents:\s*read/);
   assert.match(workflow, /secrets\.SUPABASE_KEEPALIVE_DB_URL/);

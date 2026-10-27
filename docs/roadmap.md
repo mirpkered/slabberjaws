@@ -10,7 +10,7 @@ This roadmap summarizes the current product state and the remaining work identif
 - Support scan and Photograph Slab evidence in one in-progress Add Card session, with stronger structured scan evidence and manual edits protected from weaker OCR suggestions.
 - Keep captured slab photos local and temporary; no photo upload or permanent photo storage is part of the workflow.
 - Expand the Supabase grader constraint for all eleven canonical grader values without changing collection records, duplicate protection, or RLS.
-- Add a restricted-role Supabase keepalive workflow using a read-only `SELECT 1`, scheduled every three days and manually runnable. A workflow rerun has now succeeded after correcting the role password and allowing the shared pooler password rotation to settle; the database query is verified working.
+- Add a restricted-role Supabase keepalive workflow using a read-only `SELECT 1`, scheduled daily at 07:23 UTC and manually runnable. Historical GitHub runs show successful database queries, including Oct 25, 2026; whether Supabase counts this operation toward Free-plan inactivity is undocumented, and the project's restored/active state still requires verification.
 
 ## Next
 
@@ -21,5 +21,6 @@ This roadmap summarizes the current product state and the remaining work identif
 ## Operational notes
 
 - The keepalive uses the restricted `slabberjaws_keepalive` database role and the shared session pooler. It does not read or write card records and does not require app users to sign in.
-- Scheduled GitHub Actions may be delayed and are not guaranteed to run at an exact time. Keepalive activity may help avoid inactivity pauses but is not a substitute for a paid availability guarantee.
-- The latest keepalive confirmation was reported by the user after a successful workflow rerun. No database schema or card-data change was part of that verification.
+- The workflow runs once per day on `23 7 * * *` (UTC). GitHub Actions scheduling may be delayed or missed; the cron time is not guaranteed.
+- Daily `SELECT 1` success confirms the restricted database connection and query, but does not prove Supabase counts the operation as qualifying activity. Free-plan inactivity pauses remain possible; this is not a substitute for a paid availability guarantee.
+- The dashboard showed the project as Unhealthy during the Oct 27, 2026 investigation. After restoration, verify Healthy/Active status and manually run the keepalive before treating database connectivity as current. No database schema or card-data change was part of the scheduling update.

@@ -2,9 +2,8 @@ name: Supabase database keepalive
 
 on:
   schedule:
-    # Cron cannot express a strict rolling 72-hour interval. This runs on
-    # day-of-month steps of three; GitHub may delay scheduled workflows.
-    - cron: "23 7 */3 * *"
+    # Run once daily at an off-peak minute; GitHub may delay scheduled runs.
+    - cron: "23 7 * * *"
   workflow_dispatch:
 
 permissions:

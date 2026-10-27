@@ -1,6 +1,6 @@
 # Supabase database keepalive
 
-`.github/workflows/supabase-keepalive.yml` performs a direct, read-only PostgreSQL `SELECT 1` against the Slabberjaws project (`kewynepvspcmrujustds`). It runs on cron `23 7 */3 * *` (UTC) and can also be started with **Actions → Supabase database keepalive → Run workflow**. GitHub cron uses calendar day-of-month steps rather than a rolling timer, can be delayed, and is not guaranteed to run at an exact time.
+`.github/workflows/supabase-keepalive.yml` performs a direct, read-only PostgreSQL `SELECT 1` against the Slabberjaws project (`kewynepvspcmrujustds`). It runs once each day at `07:23 UTC` (`23 7 * * *`) and can also be started with **Actions → Supabase database keepalive → Run workflow**. The minute is off the hour to reduce scheduling contention, but GitHub scheduled workflows can be delayed or missed and are not guaranteed to run at an exact time.
 
 ## One-time credential setup
 
@@ -32,7 +32,9 @@ The password must be URL-encoded if it contains reserved URI characters. Before 
 
 ## Running and monitoring
 
-After adding the secret, open the workflow under the repository's **Actions** tab and select **Run workflow** for an immediate check. A successful run must show the `SELECT 1` verification step; a green HTTP/API response alone is not used as evidence. Scheduled and manual failures are visible in the same workflow's run history and logs. The output is limited to connection validation and the scalar query result; no card records are selected or changed.
+After adding the secret, open the workflow under the repository's **Actions** tab and select **Run workflow** for an immediate check. A successful run must show the `SELECT 1` verification step; a green HTTP/API response alone is not used as evidence. Review successful and failed executions in the same workflow's run history and open a run to inspect its validation and query steps. Failures cause the run to fail and are reported without printing the credential. The output is limited to connection validation and the scalar query result; no card records are selected or changed.
+
+If Supabase has paused the project, open the project in the Supabase dashboard, choose **Resume project**, and confirm the restoration. Wait until the project reports Healthy/Active. Then manually run this workflow and verify the `SELECT 1` step succeeds. A workflow run cannot restore a paused project.
 
 ### Failure notifications
 
@@ -64,9 +66,9 @@ The first workflow commit was made Oct 10 at 17:05 UTC, after that day's schedul
 
 Supabase's current [Free-plan pausing guide](https://supabase.com/docs/guides/platform/free-project-pausing) says a project is evaluated on sufficient **user database activity** over the past week, that too few user queries are the clearest candidates, and that a few database requests each day typically suffice. It also says that after a warning, project API calls or requests through a connected application can generate activity. The guide does **not** define whether a scheduled direct PostgreSQL `SELECT 1` from a restricted CI role counts, nor whether Auth or Edge Function requests count. It neither explicitly blesses nor prohibits synthetic scheduled keepalive traffic. The recorded SQL runs prove that the workflow connected and executed its query; they do not prove Supabase counted them for inactivity. The exact warning and pause timestamps were not available in the repository or Actions history, so the evidence cannot establish whether early failures, a missed qualifying activity window, or Supabase's activity classification caused this pause.
 
-The operation remains direct SQL because the existing app schema denies `anon` access to `public.cards`; adding a public table grant, broadening RLS, using a service-role key, or creating a privileged API endpoint would expand access and is not justified by the available evidence. No schedule change was made: the available run history shows no missed scheduled run after Oct 13, while the query type's eligibility remains undocumented. Increasing the frequency of the same query would add traffic without establishing that Supabase counts it. No card data, schema, grants, or policies were changed for this investigation.
+The operation remains direct SQL because the existing app schema denies `anon` access to `public.cards`; adding a public table grant, broadening RLS, using a service-role key, or creating a privileged API endpoint would expand access and is not justified by the available evidence. At the time of that investigation, no schedule change was made: the available run history showed no missed scheduled run after Oct 13, while the query type's eligibility remained undocumented. In this follow-up, the schedule is changed to daily at the user's request; it is the same restricted `SELECT 1` query and this frequency change does not establish that Supabase counts it. No card data, schema, grants, or policies were changed.
 
-Supabase documents visiting the project dashboard or generating sufficient project API/application requests as ways to respond to a warning. We do not have evidence that a scheduled `SELECT 1` alone prevents an inactivity pause. If the Free project pauses again despite daily green query runs, use the dashboard/API activity guidance or consider a paid plan; this workflow is not an availability guarantee.
+Supabase documents visiting the project dashboard or generating sufficient project API/application requests as ways to respond to a warning. We do not have evidence that daily scheduled `SELECT 1` queries alone cause Supabase to consider the project active or prevent an inactivity pause. If the Free project pauses again despite daily green query runs, use the dashboard/API activity guidance or consider a paid plan; this workflow is not an availability guarantee.
 
 Disable it from the workflow's Actions page using **Disable workflow**. Re-enable it there when desired. Scheduled Actions can be delayed or paused by GitHub, and Supabase Free projects can still be paused for inactivity. This workflow is not a guaranteed substitute for Supabase's paid availability guarantees.
 
