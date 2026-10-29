@@ -123,6 +123,22 @@ test('preselected CSG waits briefly after its barcode so a later QR supplies gra
   await expect(received).toContainText('Raw decoded payload');
   await expect(received).toContainText('Values received by Add CardCert 1012833027 · Grade 8.5');
 });
+test('selecting CSG after a barcode offers a same-session QR rescan and retains the grader',async({page})=>{
+  await cameraMock(page);await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+  await openAdd(page);await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
+  await state(page,'1012833027','code_128');
+  await page.getByLabel('Grading company').selectOption('CSG');
+  await expect(page.getByLabel('Decoded certification number')).toHaveValue('1012833027');
+  await page.getByRole('button',{name:'Scan CSG QR for grade and verification link'}).click();
+  await expect(page.locator('.scan-camera')).toBeVisible();
+  await state(page,csg,'qr_code');
+  await expect(page.getByLabel('Editable grade candidate')).toHaveValue('8.5');
+  await expect(page.getByLabel('Grading company')).toHaveValue('CSG');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+  await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+});
 test('CSG and C3G QR URLs reach card details intact without any lookup request',async({page})=>{
   await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;
   await page.route('**/functions/v1/lookup',route=>{lookupCount++;return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'not expected'}});});

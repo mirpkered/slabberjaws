@@ -16,7 +16,7 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
   const video = useRef<HTMLVideoElement>(null);
   const cameraSurface = useRef<HTMLDivElement>(null);
   const camera = useRef<ReturnType<typeof startCamera> | null>(null);
-  const graderForScan = initialGrader??'';
+  const graderForScan = useRef<Grader | ''>(initialGrader??'');
   const pendingBarcode = useRef<{raw:string;format:string;timer:number}|null>(null);
   const pointers = useRef(new Map<number,{x:number;y:number}>());
   const [attempt,setAttempt] = useState(0), [payload,setPayload] = useState<ScanPayload | null>(null), [barcodeCandidate,setBarcodeCandidate] = useState('');
@@ -29,9 +29,9 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
     const parsed=parseScanPayload(raw), classification=classifyScanPayload(raw), normalizedFormat=format.toLowerCase();
     const linearIdBarcode=/code[_ -]?(?:128|39)/i.test(normalizedFormat)?parsed.certNumber??'':'';
     setStatus('Code found');setPayload(parsed);setAcceptedClassification(classification);setAcceptedFormat(format);setBarcodeCandidate(linearIdBarcode);
-    setCert(classification.kind==='grader-certification-url'?classification.payload.certNumber??'':normalizedFormat.includes('qr')?parsed.certNumber??'':graderForScan==='CSG'?linearIdBarcode:'');
-    setGradeCandidate(classification.kind==='grader-certification-url'?classification.gradeCandidate??'':'');setGrader(initialGrader??'');setHasTorch(false);
-  },[graderForScan,initialGrader]);
+    setCert(classification.kind==='grader-certification-url'?classification.payload.certNumber??'':normalizedFormat.includes('qr')?parsed.certNumber??'':graderForScan.current==='CSG'?linearIdBarcode:'');
+    setGradeCandidate(classification.kind==='grader-certification-url'?classification.gradeCandidate??'':'');setGrader(graderForScan.current||initialGrader||'');setHasTorch(false);
+  },[initialGrader]);
   function scanEvidenceDiagnostic() {
     if(!diagnosticsEnabled||!payload)return undefined;
     return {source:scanSourceLabel(payload.rawPayload,acceptedFormat),format:acceptedFormat||'unknown',classification:(acceptedClassification??classifyScanPayload(payload.rawPayload)).kind,rawPayload:payload.rawPayload};
@@ -45,7 +45,7 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
       // carries the grade and verification URL. When CSG was selected before
       // scanning, give the QR a short chance to decode before using barcode-only
       // evidence; the barcode remains an automatic fallback.
-      if(graderForScan==='CSG'&&isLinearCert){
+      if(graderForScan.current==='CSG'&&isLinearCert){
         if(!pendingBarcode.current){
           const pending={raw:raw.trim(),format,timer:0};
           pending.timer=window.setTimeout(()=>{if(pendingBarcode.current!==pending)return;pendingBarcode.current=null;camera.current?.stop();acceptDecoded(pending.raw,pending.format);},1400);
@@ -64,9 +64,9 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
     document.addEventListener('visibilitychange',hidden);
     window.addEventListener('pagehide',interrupt);
     return () => {current.stop();if(pendingBarcode.current){window.clearTimeout(pendingBarcode.current.timer);pendingBarcode.current=null;}camera.current = null;document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',interrupt);};
-  },[attempt,payload,initialGrader,acceptDecoded,graderForScan]);
-  function reset() {camera.current?.stop();if(pendingBarcode.current){window.clearTimeout(pendingBarcode.current.timer);pendingBarcode.current=null;}setPayload(null);setAcceptedClassification(null);setAcceptedFormat('');setBarcodeCandidate('');setCert('');setGrader(initialGrader??'');setGradeCandidate('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setCopyStatus('');setStatus('Requesting camera access…');setAttempt(value=>value+1);}
-  function selectGrader(value:Grader|''){setGrader(value);setCert(current=>certAfterGraderSelection(value,current,barcodeCandidate));}
+  },[attempt,payload,initialGrader,acceptDecoded]);
+  function reset() {const selected=grader||initialGrader||'';graderForScan.current=selected;camera.current?.stop();if(pendingBarcode.current){window.clearTimeout(pendingBarcode.current.timer);pendingBarcode.current=null;}setPayload(null);setAcceptedClassification(null);setAcceptedFormat('');setBarcodeCandidate('');setCert('');setGrader(selected);setGradeCandidate('');setError('');setTorch(false);setHasTorch(false);setDiagnostics(null);setFocusPoint(null);setCopyStatus('');setStatus('Requesting camera access…');setAttempt(value=>value+1);}
+  function selectGrader(value:Grader|''){graderForScan.current=value;setGrader(value);setCert(current=>certAfterGraderSelection(value,current,barcodeCandidate));}
   async function copyRaw() { if(!payload) return; try { await navigator.clipboard.writeText(payload.rawPayload); setCopyStatus('Copied'); } catch { setCopyStatus('Select and copy the decoded data below.'); } }
   async function scanStill() { setStatus('Scanning this frame…'); const surface=cameraSurface.current?.getBoundingClientRect(), target=cameraSurface.current?.querySelector('.scan-target')?.getBoundingClientRect(), v=video.current; const region=surface&&target&&v?.videoWidth ? sourceRect({width:v.videoWidth,height:v.videoHeight},{x:surface.x,y:surface.y,width:surface.width,height:surface.height},{x:target.x,y:target.y,width:target.width,height:target.height}) : undefined; const result=await camera.current?.scanStill(region); if(!result?.raw) setStatus(`Couldn't read that code. Hold it steady and try again, or enter the cert manually.`); }
   async function setZoom(value:number) { const current=await camera.current?.zoom(value); if(current !== undefined) setDiagnostics(previous=>previous?.zoom ? {...previous,zoom:{...previous.zoom,current}} : previous); }
@@ -93,7 +93,7 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
       <p className="muted">Check the slab label and confirm the certification number.</p>
       {!payload.certNumber && <><p role="status" className="form-message">The code was read, but a certification number could not be identified safely. Type it below or rescan.</p><section className="raw-payload" aria-label="Decoded raw data"><strong>DECODED RAW DATA</strong><code>{payload.rawPayload}</code><button type="button" className="account-button" onClick={()=>void copyRaw()}>Copy raw data</button>{copyStatus&&<p role="status">{copyStatus}</p>}</section></>}
       <label className="field">Grading company<select value={grader} onChange={event=>selectGrader(event.target.value as Grader)}><option value="">Choose a grading company</option>{graders.map(value=><option key={value}>{value}</option>)}</select></label>
-      {barcodeCandidate&&<p role="status" className="form-message">A Code 128/39 barcode was read. Choose CSG to use its numeric certification candidate, or enter the cert printed on another grader’s slab.</p>}
+      {barcodeCandidate&&<p role="status" className="form-message">{grader==='CSG'?'This barcode provides the certification number only. Scan the CSG QR to add its grade and verification link.':'A Code 128/39 barcode was read. Choose CSG to use its numeric certification candidate, or enter the cert printed on another grader’s slab.'}</p>}
       <label className="field">Decoded certification number<input value={cert} onChange={event=>setCert(event.target.value)} autoComplete="off" spellCheck={false}/></label>
       <button className="primary wide" disabled={!grader || !cert.trim()} onClick={()=>{const handoff=confirmedScanHandoff(payload.rawPayload,grader,cert,gradeCandidate,classification);if(handoff?.kind==='lookup')onConfirm(handoff.grader,handoff.certNumber);else if(handoff?.kind==='manual')onManualDetails(handoff.grader,handoff.certNumber,{certUrl:handoff.certUrl,grade:handoff.grade,...(scanEvidenceDiagnostic()?{scanDiagnostic:scanEvidenceDiagnostic()}: {})});}}>{grader&&hasAutomaticLookup(grader)?'Look up certification':'Continue to card details'}</button>
       </>})()}
@@ -107,7 +107,7 @@ export function ScanEntry({graders,initialGrader,diagnosticsEnabled=false,onConf
       <div className="scan-desktop-actions">{hasTorch && !error && <button className="account-button" aria-label={`Turn flashlight ${torch?'off':'on'}`} aria-pressed={torch} onClick={async()=>{try{await camera.current?.torch(!torch);setTorch(!torch);}catch{setHasTorch(false);setStatus('Flashlight unavailable. You can continue scanning.');}}}>Turn flashlight {torch?'off':'on'}</button>}<button className="text-button" onClick={()=>{camera.current?.stop();onCancel();}}>Cancel scan</button></div>
     </>}
     {diagnosticsEnabled&&payload&&(()=>{const info=scanDiagnostic(payload.rawPayload,acceptedFormat,grader,acceptedClassification??undefined);return <details className="scan-payload-diagnostics" open><summary>Scan diagnostics (local only)</summary><dl><dt>Code type / source</dt><dd>{info.source}</dd><dt>Payload classification</dt><dd>{info.classification}</dd><dt>Raw decoded value</dt><dd><code>{info.raw}</code></dd><dt>Normalized grader</dt><dd>{info.grader||'Not selected'}</dd><dt>Suggested grader</dt><dd>{info.suggestedGrader||'None'}</dd><dt>Normalized cert</dt><dd>{info.cert||'None'}</dd><dt>Normalized grade</dt><dd>{info.grade||'None'}</dd><dt>Verification URL</dt><dd>{info.verificationUrl||'None'}</dd><dt>Evidence to apply on continue</dt><dd>{info.applied ? `${info.applied.route}: ${info.applied.grader} · cert ${info.applied.cert}${info.applied.grade?` · grade ${info.applied.grade}`:''}${info.applied.verificationUrl?` · ${info.applied.verificationUrl}`:''}` : 'Not applied yet — choose a grader and continue.'}</dd></dl></details>;})()}
-    {(payload || error) && <button className="text-button" onClick={reset}>Rescan</button>}
+    {(payload || error) && <button className="text-button" onClick={reset}>{barcodeCandidate&&grader==='CSG'?'Scan CSG QR for grade and verification link':'Rescan'}</button>}
     <button className="text-button scan-manual" onClick={manual}>Enter Cert Manually</button>
     {payload && <button className="text-button" onClick={()=>{camera.current?.stop();onCancel();}}>Cancel scan</button>}
   </div>;
