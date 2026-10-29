@@ -38,6 +38,7 @@ import { getDiagnosticsServerSnapshot, getDiagnosticsSnapshot, persistDiagnostic
 
 type Grader = NormalizedCard["grader"];
 type Card = NormalizedCard;
+type ScanHandoffDiagnostic = {source:string;format:string;classification:string;rawPayload:string};
 const buildId = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_BUILD_ID ?? "local-unversioned";
 const seed: Card[] = [
   {
@@ -136,6 +137,7 @@ export default function Home() {
     [draft, setDraft] = useState<Card | null>(null),
     [evidenceSources, setEvidenceSources] = useState<CardEvidenceSources>({}),
     [evidenceConflicts, setEvidenceConflicts] = useState<EvidenceConflict[]>([]),
+    [scanHandoffDiagnostic, setScanHandoffDiagnostic] = useState<ScanHandoffDiagnostic|null>(null),
     [photoReturnToManual, setPhotoReturnToManual] = useState(false),
     [scanReturnToManual, setScanReturnToManual] = useState(false),
     [lookupMessage, setLookupMessage] = useState(""),
@@ -317,6 +319,7 @@ export default function Home() {
     setDraft(null);
     setEvidenceSources({});
     setEvidenceConflicts([]);
+    setScanHandoffDiagnostic(null);
     setPhotoReturnToManual(false);
     setScanReturnToManual(false);
     setLookupMessage("");
@@ -936,6 +939,7 @@ export default function Home() {
                   setDraft(merged.card);
                   setEvidenceSources(merged.sources);
                   setEvidenceConflicts(merged.conflicts);
+                  setScanHandoffDiagnostic(extra?.scanDiagnostic??null);
                   setScanReturnToManual(false);
                   setStep("manual");
                 }}
@@ -1077,14 +1081,16 @@ export default function Home() {
                   <span>{draft.grader}</span>
                   <code>{draft.certNumber}</code>
                 </div>
-                {diagnosticsEnabled && (evidenceSources.certNumber === "scan" || evidenceSources.grade === "scan" || evidenceSources.certUrl === "scan") && (
+                {diagnosticsEnabled && (scanHandoffDiagnostic || evidenceSources.certNumber === "scan" || evidenceSources.grade === "scan" || evidenceSources.certUrl === "scan") && (
                   <details className="scan-payload-diagnostics" open>
                     <summary>Scan evidence applied to Add Card</summary>
                     <dl>
+                      {scanHandoffDiagnostic&&<><dt>Accepted code source</dt><dd>{scanHandoffDiagnostic.source} · {scanHandoffDiagnostic.format}</dd><dt>Payload classification</dt><dd>{scanHandoffDiagnostic.classification}</dd><dt>Raw decoded payload</dt><dd><code>{scanHandoffDiagnostic.rawPayload}</code></dd></>}
                       <dt>Selected grader</dt><dd>{draft.grader}</dd>
                       {evidenceSources.certNumber === "scan" && <><dt>Certification number</dt><dd>{draft.certNumber}</dd></>}
                       {evidenceSources.grade === "scan" && <><dt>Grade candidate</dt><dd>{draft.grade}</dd></>}
                       {evidenceSources.certUrl === "scan" && <><dt>Verification URL</dt><dd><code>{draft.certUrl}</code></dd></>}
+                      <dt>Values received by Add Card</dt><dd>Cert {draft.certNumber || 'blank'} · Grade {draft.grade || 'blank'} · URL {draft.certUrl || 'blank'}</dd>
                     </dl>
                   </details>
                 )}

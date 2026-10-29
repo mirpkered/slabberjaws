@@ -102,6 +102,27 @@ test('CSG Code 128 cert is held as a candidate until CSG is explicitly selected,
   await page.getByRole('button',{name:'Continue to card details'}).click();await expect(page.locator('.identity')).toContainText('CSG');await expect(page.locator('.identity')).toContainText('1012833027');await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');expect(lookupCount).toBe(0);
   await page.locator('.add-modal .close').click();await page.locator('.desktop-add').click();await expect(page.getByLabel('Certification number')).toHaveValue('');await expect(page.getByLabel('Grading company')).toHaveValue('Degree');
 });
+test('preselected CSG waits briefly after its barcode so a later QR supplies grade and URL through Card Details',async({page})=>{
+  await cameraMock(page);await page.goto('./?diagnostics=1',{waitUntil:'networkidle'});
+  const csg='https://www.cgccards.com/CERTLOOKUP/1012833027/8_5';
+  await openAdd(page);await page.getByLabel('Grading company').selectOption('CSG');
+  await page.getByRole('button',{name:'Scan Slab',exact:true}).click();
+  await state(page,'1012833027','code_128');
+  await expect(page.locator('.scan-status')).toContainText('Checking briefly for the CSG QR');
+  // The same live decoder reports the QR on a subsequent frame. It supersedes
+  // the pending barcode before the short barcode fallback expires.
+  await state(page,csg,'qr_code');
+  await expect(page.locator('.scan-payload-diagnostics')).toContainText('QR URL');
+  await expect(page.locator('.scan-payload-diagnostics')).toContainText('Normalized grade8.5');
+  await page.getByRole('button',{name:'Continue to card details'}).click();
+  await expect(page.getByLabel('Certification number')).toHaveValue('1012833027');
+  await expect(page.locator('.manual-grid').getByLabel('Grade')).toHaveValue('8.5');
+  await expect(page.getByLabel('Certification page URL')).toHaveValue(csg);
+  const received=page.locator('.add-modal .scan-payload-diagnostics');
+  await expect(received).toContainText('Accepted code sourceQR URL');
+  await expect(received).toContainText('Raw decoded payload');
+  await expect(received).toContainText('Values received by Add CardCert 1012833027 · Grade 8.5');
+});
 test('CSG and C3G QR URLs reach card details intact without any lookup request',async({page})=>{
   await page.setViewportSize({width:390,height:844});await cameraMock(page);await page.goto('./',{waitUntil:'networkidle'});let lookupCount=0;
   await page.route('**/functions/v1/lookup',route=>{lookupCount++;return route.fulfill({json:{ok:false,code:'GRADER_UNAVAILABLE',message:'not expected'}});});
